@@ -110,10 +110,11 @@ For any inquiries or feedback, refer to the contact section on the website.
 
 | Name               | 
 | ------------------ | 
-| Caroline El-Baiady | 
-| Habiba Mamdouh     | 
+| Caroline El-baiady | 
 | Khadija Elfeky     | 
 | Mohamed Abdelrazik | 
+| Reem Khaled        | 
+| Omar Walid         | 
 
 ## Screenshots
 ### Homepage
