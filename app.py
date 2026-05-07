@@ -96,36 +96,36 @@ def init_db():
     conn.commit()
     cur.close(); conn.close()
 
-def login_required(f):
-    @wraps(f)
-    def d(*args, **kwargs):
+def login_required(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
         if 'user_id' not in session:
             return jsonify({'error': 'Unauthorized'}), 401
-        return f(*args, **kwargs)
-    return d
+        return func(*args, **kwargs)
+    return wrapper
 
 def role_required(*roles):
-    def decorator(f):
-        @wraps(f)
-        def d(*args, **kwargs):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
             if 'user_id' not in session:
                 return jsonify({'error': 'Unauthorized'}), 401
             if session.get('role') not in roles:
                 return jsonify({'error': 'Forbidden'}), 403
-            return f(*args, **kwargs)
-        return d
+            return func(*args, **kwargs)
+        return wrapper
     return decorator
 
 def row_to_dict(row):
     if row is None: return None
     if hasattr(row, '_asdict'): return row._asdict()
     if hasattr(row, 'keys'):
-        d = {}
-        for k in row.keys():
-            v = row[k]
+        data = {}
+        for keys in row.keys():
+            v = row[keys]
             if hasattr(v, 'isoformat'): v = v.isoformat()
-            d[k] = v
-        return d
+            data[keys] = v
+        return data
     return dict(row)
 
 def rows_to_list(rows):
@@ -149,15 +149,15 @@ def serve_react(path):
 
 @app.route('/api/auth/login', methods=['POST'])
 def api_login():
-    data = request.get_json()
-    email = data.get('email', '').strip()
-    password = data.get('password', '').strip()
+    request_data = request.get_json()
+    email = request_data.get('email', '').strip()
+    password = request_data.get('password', '').strip()
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute('SELECT * FROM "user" WHERE email=%s AND password=%s', (email, password))
-    user = cur.fetchone()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute('SELECT * FROM "user" WHERE email=%s AND password=%s', (email, password))
+    user = cursor.fetchone()
     if not user:
-        cur.close(); conn.close()
+        cursor.close(); conn.close()
         return jsonify({'error': 'Invalid email or password'}), 401
     session['user_id'] = user['user_id']
     session['username'] = user['username']
@@ -165,14 +165,14 @@ def api_login():
     session['email'] = user['email']
     role = user['role']
     if role == 'patient':
-        cur.execute('SELECT patient_id FROM patient WHERE user_id=%s', (user['user_id'],))
-        p = cur.fetchone()
-        if p: session['patient_id'] = p['patient_id']
+        cursor.execute('SELECT patient_id FROM patient WHERE user_id=%s', (user['user_id'],))
+        patient = cursor.fetchone()
+        if patient: session['patient_id'] = patient['patient_id']
     else:
-        cur.execute('SELECT staff_id FROM staff WHERE user_id=%s', (user['user_id'],))
-        s = cur.fetchone()
-        if s: session['staff_id'] = s['staff_id']
-    cur.close(); conn.close()
+        cursor.execute('SELECT staff_id FROM staff WHERE user_id=%s', (user['user_id'],))
+        staff = cursor.fetchone()
+        if staff: session['staff_id'] = staff['staff_id']
+    cursor.close(); conn.close()
     return jsonify({'user_id': session['user_id'], 'username': session['username'], 'role': role, 'email': session['email']})
 
 @app.route('/api/auth/logout', methods=['POST'])
@@ -188,19 +188,19 @@ def api_me():
 
 @app.route('/api/auth/register', methods=['POST'])
 def api_register():
-    d = request.get_json()
-    SSN = d.get('SSN', '')
-    first_name = d.get('fname', '')
-    middle_name = d.get('mname', '')
-    last_name = d.get('lname', '')
-    gender = d.get('gender', 'M')
-    dob = d.get('DOB', '') or None
-    phone = d.get('phone', '')
-    address = d.get('add', '')
-    blood_type = d.get('bt', '')
-    mh = d.get('mh', '')
-    email = d.get('email', '')
-    password = d.get('password', '')
+    request_data = request.get_json()
+    SSN = request_data.get('SSN', '')
+    first_name = request_data.get('fname', '')
+    middle_name = request_data.get('mname', '')
+    last_name = request_data.get('lname', '')
+    gender = request_data.get('gender', 'M')
+    dob = request_data.get('DOB', '') or None
+    phone = request_data.get('phone', '')
+    address = request_data.get('add', '')
+    blood_type = request_data.get('bt', '')
+    medical_history = request_data.get('mh', '')
+    email = request_data.get('email', '')
+    password = request_data.get('password', '')
     full_name = f"{first_name} {middle_name} {last_name}".strip()
     username = email.split('@')[0]
     if not SSN.isdigit() or len(SSN) != 14:
@@ -210,22 +210,22 @@ def api_register():
     if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
         return jsonify({'error': 'Invalid email'}), 400
     conn = get_db()
-    cur = conn.cursor()
-    cur.execute('SELECT user_id FROM "user" WHERE email=%s', (email,))
-    if cur.fetchone():
-        cur.close(); conn.close()
+    cursor = conn.cursor()
+    cursor.execute('SELECT user_id FROM "user" WHERE email=%s', (email,))
+    if cursor.fetchone():
+        cursor.close(); conn.close()
         return jsonify({'error': 'Email already registered'}), 400
     try:
-        cur.execute('INSERT INTO "user" (username, password, email, role) VALUES (%s,%s,%s,%s) RETURNING user_id', (username, password, email, 'patient'))
-        uid = cur.fetchone()[0]
-        cur.execute('INSERT INTO patient (user_id, p_full_name, dob, gender, phone, address, blood_type, medical_history, ssn) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)',
-                    (uid, full_name, dob, gender, phone, address, blood_type, mh, SSN))
+        cursor.execute('INSERT INTO "user" (username, password, email, role) VALUES (%s,%s,%s,%s) RETURNING user_id', (username, password, email, 'patient'))
+        user_id = cursor.fetchone()[0]
+        cursor.execute('INSERT INTO patient (user_id, p_full_name, dob, gender, phone, address, blood_type, medical_history, ssn) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+                    (user_id, full_name, dob, gender, phone, address, blood_type, medical_history, SSN))
         conn.commit()
-        cur.close(); conn.close()
+        cursor.close(); conn.close()
         return jsonify({'ok': True})
     except Exception as e:
         conn.rollback()
-        cur.close(); conn.close()
+        cursor.close(); conn.close()
         return jsonify({'error': str(e)}), 400
 
 # ─── Patient API ────────────────────────────────────────────────
@@ -233,113 +233,113 @@ def api_register():
 @app.route('/api/patient/dashboard')
 @role_required('patient')
 def api_patient_dashboard():
-    pid = session['patient_id']
-    conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute('SELECT * FROM patient WHERE patient_id=%s', (pid,))
-    patient = row_to_dict(cur.fetchone())
-    cur.execute('''SELECT a.*, s.s_full_name as staff_name FROM appointment a LEFT JOIN staff s ON a.staff_id=s.staff_id
-        WHERE a.patient_id=%s ORDER BY a.scheduled_datetime DESC LIMIT 5''', (pid,))
-    appointments = rows_to_list(cur.fetchall())
-    cur.execute('SELECT * FROM invoice WHERE patient_id=%s ORDER BY due_date DESC LIMIT 5', (pid,))
-    invoices = rows_to_list(cur.fetchall())
-    cur.execute('''SELECT mr.*, rr.findings_and_impression, rr.report_date, rr.signed FROM medical_record mr
-        LEFT JOIN radiology_report rr ON mr.report_id=rr.report_id WHERE mr.patient_id=%s ORDER BY mr.date_created DESC LIMIT 5''', (pid,))
-    records = rows_to_list(cur.fetchall())
-    cur.close(); conn.close()
+    patient_id = session['patient_id']
+    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute('SELECT * FROM patient WHERE patient_id=%s', (patient_id,))
+    patient = row_to_dict(cursor.fetchone())
+    cursor.execute('''SELECT appointment.*, staff.s_full_name as staff_name FROM appointment LEFT JOIN staff ON appointment.staff_id=staff.staff_id
+        WHERE appointment.patient_id=%s ORDER BY appointment.scheduled_datetime DESC LIMIT 5''', (patient_id,))
+    appointments = rows_to_list(cursor.fetchall())
+    cursor.execute('SELECT * FROM invoice WHERE patient_id=%s ORDER BY due_date DESC LIMIT 5', (patient_id,))
+    invoices = rows_to_list(cursor.fetchall())
+    cursor.execute('''SELECT medical_record.*, radiology_report.findings_and_impression, radiology_report.report_date, radiology_report.signed FROM medical_record
+        LEFT JOIN radiology_report ON medical_record.report_id=radiology_report.report_id WHERE medical_record.patient_id=%s ORDER BY medical_record.date_created DESC LIMIT 5''', (patient_id,))
+    records = rows_to_list(cursor.fetchall())
+    cursor.close(); conn.close()
     return jsonify({'patient': patient, 'appointments': appointments, 'invoices': invoices, 'records': records})
 
 @app.route('/api/patient/profile', methods=['GET', 'PUT'])
 @role_required('patient')
 def api_patient_profile():
-    pid = session['patient_id']
-    conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    patient_id = session['patient_id']
+    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     if request.method == 'PUT':
-        d = request.get_json()
-        cur.execute('UPDATE patient SET phone=%s, address=%s, blood_type=%s, medical_history=%s WHERE patient_id=%s',
-                    (d.get('phone'), d.get('address'), d.get('blood_type'), d.get('medical_history'), pid))
+        request_data = request.get_json()
+        cursor.execute('UPDATE patient SET phone=%s, address=%s, blood_type=%s, medical_history=%s WHERE patient_id=%s',
+                    (request_data.get('phone'), request_data.get('address'), request_data.get('blood_type'), request_data.get('medical_history'), patient_id))
         conn.commit()
-    cur.execute('SELECT * FROM patient WHERE patient_id=%s', (pid,))
-    p = row_to_dict(cur.fetchone())
-    cur.close(); conn.close()
-    return jsonify(p)
+    cursor.execute('SELECT * FROM patient WHERE patient_id=%s', (patient_id,))
+    patient = row_to_dict(cursor.fetchone())
+    cursor.close(); conn.close()
+    return jsonify(patient)
 
 @app.route('/api/patient/appointments')
 @role_required('patient')
 def api_patient_appointments():
-    pid = session['patient_id']
-    conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute('''SELECT a.*, s.s_full_name as staff_name FROM appointment a LEFT JOIN staff s ON a.staff_id=s.staff_id
-        WHERE a.patient_id=%s ORDER BY a.scheduled_datetime DESC''', (pid,))
-    rows = rows_to_list(cur.fetchall())
-    cur.close(); conn.close()
+    patient_id = session['patient_id']
+    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute('''SELECT appointment.*, staff.s_full_name as staff_name FROM appointment LEFT JOIN staff ON appointment.staff_id=staff.staff_id
+        WHERE appointment.patient_id=%s ORDER BY appointment.scheduled_datetime DESC''', (patient_id,))
+    rows = rows_to_list(cursor.fetchall())
+    cursor.close(); conn.close()
     return jsonify(rows)
 
 @app.route('/api/patient/book-appointment', methods=['POST'])
 @role_required('patient')
 def api_book_appointment():
-    pid = session['patient_id']
-    d = request.get_json()
-    conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute("SELECT staff_id FROM staff WHERE role IN ('receptionist','technician') LIMIT 1")
-    s = cur.fetchone()
-    staff_id = s['staff_id'] if s else None
+    patient_id = session['patient_id']
+    request_data = request.get_json()
+    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute("SELECT staff_id FROM staff WHERE role IN ('receptionist','technician') LIMIT 1")
+    staff_result = cursor.fetchone()
+    staff_id = staff_result['staff_id'] if staff_result else None
     price_map = {'MRI': 1500, 'CT': 1200, 'X-Ray': 300, 'Ultrasound': 500}
-    amount = price_map.get(d.get('modality'), 800)
-    due = (datetime.now() + timedelta(days=30)).date()
+    amount = price_map.get(request_data.get('modality'), 800)
+    due_date = (datetime.now() + timedelta(days=30)).date()
     try:
-        cur.execute('INSERT INTO appointment (patient_id, staff_id, scheduled_datetime, modality, status) VALUES (%s,%s,%s,%s,%s) RETURNING appointment_id',
-                    (pid, staff_id, d.get('scheduled_datetime'), d.get('modality'), 'scheduled'))
-        appt_id = cur.fetchone()[0]
-        cur.execute('INSERT INTO imaging_order (appointment_id, referring_doctor, body_part, modality, order_status) VALUES (%s,%s,%s,%s,%s)',
-                    (appt_id, d.get('referring_doctor'), d.get('body_part'), d.get('modality'), 'pending'))
-        cur.execute('INSERT INTO invoice (patient_id, appointment_id, total_amount, status, due_date) VALUES (%s,%s,%s,%s,%s)',
-                    (pid, appt_id, amount, 'unpaid', due))
+        cursor.execute('INSERT INTO appointment (patient_id, staff_id, scheduled_datetime, modality, status) VALUES (%s,%s,%s,%s,%s) RETURNING appointment_id',
+                    (patient_id, staff_id, request_data.get('scheduled_datetime'), request_data.get('modality'), 'scheduled'))
+        appointment_id = cursor.fetchone()[0]
+        cursor.execute('INSERT INTO imaging_order (appointment_id, referring_doctor, body_part, modality, order_status) VALUES (%s,%s,%s,%s,%s)',
+                    (appointment_id, request_data.get('referring_doctor'), request_data.get('body_part'), request_data.get('modality'), 'pending'))
+        cursor.execute('INSERT INTO invoice (patient_id, appointment_id, total_amount, status, due_date) VALUES (%s,%s,%s,%s,%s)',
+                    (patient_id, appointment_id, amount, 'unpaid', due_date))
         conn.commit()
-        cur.close(); conn.close()
+        cursor.close(); conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        conn.rollback(); cur.close(); conn.close()
+        conn.rollback(); cursor.close(); conn.close()
         return jsonify({'error': str(e)}), 400
 
-@app.route('/api/patient/cancel-appointment/<int:appt_id>', methods=['POST'])
+@app.route('/api/patient/cancel-appointment/<int:appointment_id>', methods=['POST'])
 @role_required('patient')
-def api_cancel_appointment(appt_id):
-    pid = session['patient_id']
-    conn = get_db(); cur = conn.cursor()
-    cur.execute('UPDATE appointment SET status=%s WHERE appointment_id=%s AND patient_id=%s', ('cancelled', appt_id, pid))
-    conn.commit(); cur.close(); conn.close()
+def api_cancel_appointment(appointment_id):
+    patient_id = session['patient_id']
+    conn = get_db(); cursor = conn.cursor()
+    cursor.execute('UPDATE appointment SET status=%s WHERE appointment_id=%s AND patient_id=%s', ('cancelled', appointment_id, patient_id))
+    conn.commit(); cursor.close(); conn.close()
     return jsonify({'ok': True})
 
 @app.route('/api/patient/billing')
 @role_required('patient')
 def api_patient_billing():
-    pid = session['patient_id']
-    conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute('''SELECT i.*, a.modality, a.scheduled_datetime FROM invoice i
-        LEFT JOIN appointment a ON i.appointment_id=a.appointment_id WHERE i.patient_id=%s ORDER BY i.due_date DESC''', (pid,))
-    rows = rows_to_list(cur.fetchall())
-    cur.close(); conn.close()
+    patient_id = session['patient_id']
+    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute('''SELECT invoice.*, appointment.modality, appointment.scheduled_datetime FROM invoice
+        LEFT JOIN appointment ON invoice.appointment_id=appointment.appointment_id WHERE invoice.patient_id=%s ORDER BY invoice.due_date DESC''', (patient_id,))
+    rows = rows_to_list(cursor.fetchall())
+    cursor.close(); conn.close()
     return jsonify(rows)
 
-@app.route('/api/patient/pay-invoice/<int:inv_id>', methods=['POST'])
+@app.route('/api/patient/pay-invoice/<int:invoice_id>', methods=['POST'])
 @role_required('patient')
-def api_pay_invoice(inv_id):
-    pid = session['patient_id']
-    conn = get_db(); cur = conn.cursor()
-    cur.execute('UPDATE invoice SET status=%s WHERE invoice_id=%s AND patient_id=%s', ('paid', inv_id, pid))
-    conn.commit(); cur.close(); conn.close()
+def api_pay_invoice(invoice_id):
+    patient_id = session['patient_id']
+    conn = get_db(); cursor = conn.cursor()
+    cursor.execute('UPDATE invoice SET status=%s WHERE invoice_id=%s AND patient_id=%s', ('paid', invoice_id, patient_id))
+    conn.commit(); cursor.close(); conn.close()
     return jsonify({'ok': True})
 
 @app.route('/api/patient/records')
 @role_required('patient')
 def api_patient_records():
-    pid = session['patient_id']
-    conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute('''SELECT mr.*, rr.findings_and_impression, rr.report_date, rr.signed, s.s_full_name as staff_name
-        FROM medical_record mr LEFT JOIN radiology_report rr ON mr.report_id=rr.report_id
-        LEFT JOIN staff s ON mr.staff_id=s.staff_id WHERE mr.patient_id=%s ORDER BY mr.date_created DESC''', (pid,))
-    rows = rows_to_list(cur.fetchall())
-    cur.close(); conn.close()
+    patient_id = session['patient_id']
+    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute('''SELECT medical_record.*, radiology_report.findings_and_impression, radiology_report.report_date, radiology_report.signed, staff.s_full_name as staff_name
+        FROM medical_record LEFT JOIN radiology_report ON medical_record.report_id=radiology_report.report_id
+        LEFT JOIN staff ON medical_record.staff_id=staff.staff_id WHERE medical_record.patient_id=%s ORDER BY medical_record.date_created DESC''', (patient_id,))
+    rows = rows_to_list(cursor.fetchall())
+    cursor.close(); conn.close()
     return jsonify(rows)
 
 # ─── Staff API ──────────────────────────────────────────────────
@@ -347,97 +347,97 @@ def api_patient_records():
 @app.route('/api/staff/dashboard')
 @role_required('radiologist', 'technician', 'receptionist')
 def api_staff_dashboard():
-    conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute('''SELECT a.*, p.p_full_name as patient_name FROM appointment a JOIN patient p ON a.patient_id=p.patient_id
-        WHERE a.status='scheduled' ORDER BY a.scheduled_datetime ASC LIMIT 10''')
-    appointments = rows_to_list(cur.fetchall())
-    cur.execute('''SELECT io.*, a.scheduled_datetime, a.modality, p.p_full_name as patient_name
-        FROM imaging_order io JOIN appointment a ON io.appointment_id=a.appointment_id
-        JOIN patient p ON a.patient_id=p.patient_id WHERE io.order_status != 'completed' ORDER BY a.scheduled_datetime ASC LIMIT 10''')
-    orders = rows_to_list(cur.fetchall())
-    cur.close(); conn.close()
+    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute('''SELECT appointment.*, patient.p_full_name as patient_name FROM appointment JOIN patient ON appointment.patient_id=patient.patient_id
+        WHERE appointment.status='scheduled' ORDER BY appointment.scheduled_datetime ASC LIMIT 10''')
+    appointments = rows_to_list(cursor.fetchall())
+    cursor.execute('''SELECT imaging_order.*, appointment.scheduled_datetime, appointment.modality, patient.p_full_name as patient_name
+        FROM imaging_order JOIN appointment ON imaging_order.appointment_id=appointment.appointment_id
+        JOIN patient ON appointment.patient_id=patient.patient_id WHERE imaging_order.order_status != 'completed' ORDER BY appointment.scheduled_datetime ASC LIMIT 10''')
+    orders = rows_to_list(cursor.fetchall())
+    cursor.close(); conn.close()
     return jsonify({'appointments': appointments, 'orders': orders})
 
 @app.route('/api/staff/appointments')
 @role_required('radiologist', 'technician', 'receptionist')
 def api_staff_appointments():
-    conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute('''SELECT a.*, p.p_full_name as patient_name, p.phone as patient_phone FROM appointment a
-        JOIN patient p ON a.patient_id=p.patient_id ORDER BY a.scheduled_datetime DESC''')
-    rows = rows_to_list(cur.fetchall())
-    cur.close(); conn.close()
+    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute('''SELECT appointment.*, patient.p_full_name as patient_name, patient.phone as patient_phone FROM appointment
+        JOIN patient ON appointment.patient_id=patient.patient_id ORDER BY appointment.scheduled_datetime DESC''')
+    rows = rows_to_list(cursor.fetchall())
+    cursor.close(); conn.close()
     return jsonify(rows)
 
-@app.route('/api/staff/update-appointment/<int:appt_id>', methods=['POST'])
+@app.route('/api/staff/update-appointment/<int:appointment_id>', methods=['POST'])
 @role_required('radiologist', 'technician', 'receptionist')
-def api_update_appointment(appt_id):
-    d = request.get_json()
-    conn = get_db(); cur = conn.cursor()
-    cur.execute('UPDATE appointment SET status=%s WHERE appointment_id=%s', (d.get('status'), appt_id))
-    conn.commit(); cur.close(); conn.close()
+def api_update_appointment(appointment_id):
+    request_data = request.get_json()
+    conn = get_db(); cursor = conn.cursor()
+    cursor.execute('UPDATE appointment SET status=%s WHERE appointment_id=%s', (request_data.get('status'), appointment_id))
+    conn.commit(); cursor.close(); conn.close()
     return jsonify({'ok': True})
 
 @app.route('/api/staff/imaging-orders')
 @role_required('radiologist', 'technician', 'receptionist')
 def api_imaging_orders():
-    conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute('''SELECT io.*, a.scheduled_datetime, a.modality, p.p_full_name as patient_name, rr.report_id, rr.signed
-        FROM imaging_order io JOIN appointment a ON io.appointment_id=a.appointment_id
-        JOIN patient p ON a.patient_id=p.patient_id LEFT JOIN radiology_report rr ON rr.order_id=io.order_id
-        ORDER BY a.scheduled_datetime DESC''')
-    rows = rows_to_list(cur.fetchall())
-    cur.close(); conn.close()
+    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute('''SELECT imaging_order.*, appointment.scheduled_datetime, appointment.modality, patient.p_full_name as patient_name, radiology_report.report_id, radiology_report.signed
+        FROM imaging_order JOIN appointment ON imaging_order.appointment_id=appointment.appointment_id
+        JOIN patient ON appointment.patient_id=patient.patient_id LEFT JOIN radiology_report ON radiology_report.order_id=imaging_order.order_id
+        ORDER BY appointment.scheduled_datetime DESC''')
+    rows = rows_to_list(cursor.fetchall())
+    cursor.close(); conn.close()
     return jsonify(rows)
 
 @app.route('/api/staff/update-order/<int:order_id>', methods=['POST'])
 @role_required('radiologist', 'technician', 'receptionist')
 def api_update_order(order_id):
-    d = request.get_json()
-    conn = get_db(); cur = conn.cursor()
-    cur.execute('UPDATE imaging_order SET order_status=%s WHERE order_id=%s', (d.get('order_status'), order_id))
-    conn.commit(); cur.close(); conn.close()
+    request_data = request.get_json()
+    conn = get_db(); cursor = conn.cursor()
+    cursor.execute('UPDATE imaging_order SET order_status=%s WHERE order_id=%s', (request_data.get('order_status'), order_id))
+    conn.commit(); cursor.close(); conn.close()
     return jsonify({'ok': True})
 
 @app.route('/api/staff/radiology-report/<int:order_id>', methods=['GET', 'POST'])
 @role_required('radiologist')
 def api_radiology_report(order_id):
-    sid = session['staff_id']
-    conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    staff_id = session['staff_id']
+    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     if request.method == 'GET':
-        cur.execute('''SELECT io.*, a.modality, a.scheduled_datetime, p.p_full_name as patient_name, p.patient_id
-            FROM imaging_order io JOIN appointment a ON io.appointment_id=a.appointment_id
-            JOIN patient p ON a.patient_id=p.patient_id WHERE io.order_id=%s''', (order_id,))
-        order = row_to_dict(cur.fetchone())
-        cur.execute('SELECT * FROM radiology_report WHERE order_id=%s', (order_id,))
-        report = row_to_dict(cur.fetchone())
-        cur.close(); conn.close()
+        cursor.execute('''SELECT imaging_order.*, appointment.modality, appointment.scheduled_datetime, patient.p_full_name as patient_name, patient.patient_id
+            FROM imaging_order JOIN appointment ON imaging_order.appointment_id=appointment.appointment_id
+            JOIN patient ON appointment.patient_id=patient.patient_id WHERE imaging_order.order_id=%s''', (order_id,))
+        order = row_to_dict(cursor.fetchone())
+        cursor.execute('SELECT * FROM radiology_report WHERE order_id=%s', (order_id,))
+        report = row_to_dict(cursor.fetchone())
+        cursor.close(); conn.close()
         return jsonify({'order': order, 'report': report})
-    d = request.get_json()
-    findings = d.get('findings', '')
-    signed = d.get('signed', False)
+    request_data = request.get_json()
+    findings = request_data.get('findings', '')
+    signed = request_data.get('signed', False)
     try:
-        cur.execute('SELECT * FROM radiology_report WHERE order_id=%s', (order_id,))
-        existing = cur.fetchone()
+        cursor.execute('SELECT * FROM radiology_report WHERE order_id=%s', (order_id,))
+        existing = cursor.fetchone()
         if existing:
-            cur.execute('UPDATE radiology_report SET findings_and_impression=%s, signed=%s, radiologist_id=%s WHERE order_id=%s',
-                        (findings, signed, sid, order_id))
+            cursor.execute('UPDATE radiology_report SET findings_and_impression=%s, signed=%s, radiologist_id=%s WHERE order_id=%s',
+                        (findings, signed, staff_id, order_id))
         else:
-            cur.execute('INSERT INTO radiology_report (order_id, radiologist_id, findings_and_impression, signed) VALUES (%s,%s,%s,%s) RETURNING report_id',
-                        (order_id, sid, findings, signed))
-            report_id = cur.fetchone()[0]
-            cur.execute('UPDATE imaging_order SET order_status=%s WHERE order_id=%s', ('completed', order_id))
-            cur.execute('SELECT patient_id FROM appointment a JOIN imaging_order io ON io.appointment_id=a.appointment_id WHERE io.order_id=%s', (order_id,))
-            res = cur.fetchone()
-            cur.execute('SELECT modality FROM imaging_order WHERE order_id=%s', (order_id,))
-            mod = cur.fetchone()
-            if res:
-                cur.execute('INSERT INTO medical_record (patient_id, staff_id, record_type, description, report_id) VALUES (%s,%s,%s,%s,%s)',
-                            (res['patient_id'], sid, mod['modality'] if mod else 'Imaging', findings[:200], report_id))
+            cursor.execute('INSERT INTO radiology_report (order_id, radiologist_id, findings_and_impression, signed) VALUES (%s,%s,%s,%s) RETURNING report_id',
+                        (order_id, staff_id, findings, signed))
+            report_id = cursor.fetchone()[0]
+            cursor.execute('UPDATE imaging_order SET order_status=%s WHERE order_id=%s', ('completed', order_id))
+            cursor.execute('SELECT patient_id FROM appointment JOIN imaging_order ON imaging_order.appointment_id=appointment.appointment_id WHERE imaging_order.order_id=%s', (order_id,))
+            result = cursor.fetchone()
+            cursor.execute('SELECT modality FROM imaging_order WHERE order_id=%s', (order_id,))
+            modality_result = cursor.fetchone()
+            if result:
+                cursor.execute('INSERT INTO medical_record (patient_id, staff_id, record_type, description, report_id) VALUES (%s,%s,%s,%s,%s)',
+                            (result['patient_id'], staff_id, modality_result['modality'] if modality_result else 'Imaging', findings[:200], report_id))
         conn.commit()
-        cur.close(); conn.close()
+        cursor.close(); conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        conn.rollback(); cur.close(); conn.close()
+        conn.rollback(); cursor.close(); conn.close()
         return jsonify({'error': str(e)}), 400
 
 # ─── Admin API ──────────────────────────────────────────────────
@@ -445,84 +445,84 @@ def api_radiology_report(order_id):
 @app.route('/api/admin/dashboard')
 @role_required('admin')
 def api_admin_dashboard():
-    conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute('SELECT COUNT(*) as cnt FROM patient'); total_patients = cur.fetchone()['cnt']
-    cur.execute('SELECT COUNT(*) as cnt FROM staff'); total_staff = cur.fetchone()['cnt']
-    cur.execute("SELECT COUNT(*) as cnt FROM appointment WHERE status='scheduled'"); pending_appts = cur.fetchone()['cnt']
-    cur.execute("SELECT COUNT(*) as cnt FROM invoice WHERE status='unpaid'"); unpaid_invoices = cur.fetchone()['cnt']
-    cur.execute("SELECT COALESCE(SUM(total_amount),0) as total FROM invoice WHERE status='paid'"); total_revenue = cur.fetchone()['total']
-    cur.execute('''SELECT a.*, p.p_full_name as patient_name, s.s_full_name as staff_name FROM appointment a
-        JOIN patient p ON a.patient_id=p.patient_id LEFT JOIN staff s ON a.staff_id=s.staff_id
-        ORDER BY a.scheduled_datetime DESC LIMIT 10''')
-    recent_appts = rows_to_list(cur.fetchall())
-    cur.close(); conn.close()
+    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute('SELECT COUNT(*) as cnt FROM patient'); total_patients = cursor.fetchone()['cnt']
+    cursor.execute('SELECT COUNT(*) as cnt FROM staff'); total_staff = cursor.fetchone()['cnt']
+    cursor.execute("SELECT COUNT(*) as cnt FROM appointment WHERE status='scheduled'"); pending_appts = cursor.fetchone()['cnt']
+    cursor.execute("SELECT COUNT(*) as cnt FROM invoice WHERE status='unpaid'"); unpaid_invoices = cursor.fetchone()['cnt']
+    cursor.execute("SELECT COALESCE(SUM(total_amount),0) as total FROM invoice WHERE status='paid'"); total_revenue = cursor.fetchone()['total']
+    cursor.execute('''SELECT appointment.*, patient.p_full_name as patient_name, staff.s_full_name as staff_name FROM appointment
+        JOIN patient ON appointment.patient_id=patient.patient_id LEFT JOIN staff ON appointment.staff_id=staff.staff_id
+        ORDER BY appointment.scheduled_datetime DESC LIMIT 10''')
+    recent_appts = rows_to_list(cursor.fetchall())
+    cursor.close(); conn.close()
     return jsonify({'total_patients': total_patients, 'total_staff': total_staff, 'pending_appts': pending_appts,
                     'unpaid_invoices': unpaid_invoices, 'total_revenue': int(total_revenue), 'recent_appts': recent_appts})
 
 @app.route('/api/admin/staff', methods=['GET', 'POST'])
 @role_required('admin')
 def api_admin_staff():
-    conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     if request.method == 'POST':
-        d = request.get_json()
+        request_data = request.get_json()
         try:
-            cur.execute('INSERT INTO "user" (username, password, email, role) VALUES (%s,%s,%s,%s) RETURNING user_id',
-                        (d['username'], d['password'], d['email'], d['role']))
-            uid = cur.fetchone()[0]
-            cur.execute('INSERT INTO staff (user_id, s_full_name, role, department) VALUES (%s,%s,%s,%s)',
-                        (uid, d['full_name'], d['role'], d.get('department', '')))
+            cursor.execute('INSERT INTO "user" (username, password, email, role) VALUES (%s,%s,%s,%s) RETURNING user_id',
+                        (request_data['username'], request_data['password'], request_data['email'], request_data['role']))
+            user_id = cursor.fetchone()[0]
+            cursor.execute('INSERT INTO staff (user_id, s_full_name, role, department) VALUES (%s,%s,%s,%s)',
+                        (user_id, request_data['full_name'], request_data['role'], request_data.get('department', '')))
             conn.commit()
         except Exception as e:
-            conn.rollback(); cur.close(); conn.close()
+            conn.rollback(); cursor.close(); conn.close()
             return jsonify({'error': str(e)}), 400
-    cur.execute('''SELECT s.*, u.email, u.username FROM staff s JOIN "user" u ON s.user_id=u.user_id ORDER BY s.staff_id DESC''')
-    rows = rows_to_list(cur.fetchall())
-    cur.close(); conn.close()
+    cursor.execute('''SELECT staff.*, user.email, user.username FROM staff JOIN "user" ON staff.user_id=user.user_id ORDER BY staff.staff_id DESC''')
+    rows = rows_to_list(cursor.fetchall())
+    cursor.close(); conn.close()
     return jsonify(rows)
 
 @app.route('/api/admin/staff/<int:staff_id>', methods=['DELETE'])
 @role_required('admin')
 def api_delete_staff(staff_id):
-    conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute('SELECT user_id FROM staff WHERE staff_id=%s', (staff_id,))
-    s = cur.fetchone()
-    if s:
-        cur.execute('DELETE FROM "user" WHERE user_id=%s', (s['user_id'],))
+    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute('SELECT user_id FROM staff WHERE staff_id=%s', (staff_id,))
+    staff_result = cursor.fetchone()
+    if staff_result:
+        cursor.execute('DELETE FROM "user" WHERE user_id=%s', (staff_result['user_id'],))
         conn.commit()
-    cur.close(); conn.close()
+    cursor.close(); conn.close()
     return jsonify({'ok': True})
 
 @app.route('/api/admin/patients')
 @role_required('admin')
 def api_admin_patients():
-    conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute('''SELECT p.*, u.email, u.username FROM patient p JOIN "user" u ON p.user_id=u.user_id ORDER BY p.patient_id DESC''')
-    rows = rows_to_list(cur.fetchall())
-    cur.close(); conn.close()
+    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute('''SELECT patient.*, user.email, user.username FROM patient JOIN "user" ON patient.user_id=user.user_id ORDER BY patient.patient_id DESC''')
+    rows = rows_to_list(cursor.fetchall())
+    cursor.close(); conn.close()
     return jsonify(rows)
 
 @app.route('/api/admin/billing')
 @role_required('admin')
 def api_admin_billing():
-    conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute('''SELECT i.*, p.p_full_name, a.modality, a.scheduled_datetime FROM invoice i
-        JOIN patient p ON i.patient_id=p.patient_id JOIN appointment a ON i.appointment_id=a.appointment_id ORDER BY i.due_date DESC''')
-    invoices = rows_to_list(cur.fetchall())
-    cur.execute("SELECT COALESCE(SUM(total_amount),0) as t FROM invoice WHERE status='paid'"); paid = cur.fetchone()['t']
-    cur.execute("SELECT COALESCE(SUM(total_amount),0) as t FROM invoice WHERE status='unpaid'"); unpaid = cur.fetchone()['t']
-    cur.close(); conn.close()
+    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute('''SELECT invoice.*, patient.p_full_name, appointment.modality, appointment.scheduled_datetime FROM invoice
+        JOIN patient ON invoice.patient_id=patient.patient_id JOIN appointment ON invoice.appointment_id=appointment.appointment_id ORDER BY invoice.due_date DESC''')
+    invoices = rows_to_list(cursor.fetchall())
+    cursor.execute("SELECT COALESCE(SUM(total_amount),0) as t FROM invoice WHERE status='paid'"); paid = cursor.fetchone()['t']
+    cursor.execute("SELECT COALESCE(SUM(total_amount),0) as t FROM invoice WHERE status='unpaid'"); unpaid = cursor.fetchone()['t']
+    cursor.close(); conn.close()
     return jsonify({'invoices': invoices, 'paid': int(paid), 'unpaid': int(unpaid)})
 
 @app.route('/api/admin/reports')
 @role_required('admin')
 def api_admin_reports():
-    conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute('''SELECT rr.*, s.s_full_name as radiologist_name, io.modality, io.body_part, p.p_full_name as patient_name
-        FROM radiology_report rr JOIN staff s ON rr.radiologist_id=s.staff_id
-        JOIN imaging_order io ON rr.order_id=io.order_id JOIN appointment a ON io.appointment_id=a.appointment_id
-        JOIN patient p ON a.patient_id=p.patient_id ORDER BY rr.report_date DESC''')
-    rows = rows_to_list(cur.fetchall())
-    cur.close(); conn.close()
+    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute('''SELECT radiology_report.*, staff.s_full_name as radiologist_name, imaging_order.modality, imaging_order.body_part, patient.p_full_name as patient_name
+        FROM radiology_report JOIN staff ON radiology_report.radiologist_id=staff.staff_id
+        JOIN imaging_order ON radiology_report.order_id=imaging_order.order_id JOIN appointment ON imaging_order.appointment_id=appointment.appointment_id
+        JOIN patient ON appointment.patient_id=patient.patient_id ORDER BY radiology_report.report_date DESC''')
+    rows = rows_to_list(cursor.fetchall())
+    cursor.close(); conn.close()
     return jsonify(rows)
 
 @app.route('/api/chatbot', methods=['POST'])
