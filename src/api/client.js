@@ -22,6 +22,7 @@ export const patientAPI = {
   billing: () => api.get('/patient/billing'),
   payInvoice: (id) => api.post(`/patient/pay-invoice/${id}`),
   records: () => api.get('/patient/records'),
+  getImages: (orderId) => api.get(`/staff/images/${orderId}`),
 };
 
 export const staffAPI = {

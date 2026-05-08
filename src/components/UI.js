@@ -255,7 +255,7 @@ export function Chatbot() {
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#00e676', boxShadow: '0 0 6px #00e676' }} />
             <div>
               <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.9rem' }}>✦ Nova — AI Assistant</div>
-              <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.7)', marginTop: 1 }}>Powered by Claude AI</div>
+              <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.7)', marginTop: 1 }}>NovaRad Smart Assistant</div>
             </div>
           </div>
           <div style={{ height: 280, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
