@@ -64,6 +64,8 @@ export default function PatientDashboard() {
             columns={[
               { key: 'scheduled_datetime', label: 'Date', render: v => v ? new Date(v).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—' },
               { key: 'modality', label: 'Modality' },
+              { key: 'staff_name', label: 'Technician', muted: true },
+              { key: 'radiologist_name', label: 'Radiologist', muted: true },
               { key: 'status', label: 'Status', render: v => <Badge status={v} /> },
             ]}
             data={data?.appointments || []}

@@ -36,7 +36,8 @@ export function PatientAppointments() {
             { key: 'appointment_id', label: '#', muted: true },
             { key: 'scheduled_datetime', label: 'Date & Time', render: v => v ? new Date(v).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—' },
             { key: 'modality', label: 'Modality' },
-            { key: 'staff_name', label: 'Assigned To', muted: true },
+            { key: 'staff_name', label: 'Technician', muted: true },
+            { key: 'radiologist_name', label: 'Radiologist', muted: true },
             { key: 'status', label: 'Status', render: v => <Badge status={v} /> },
           ]}
           data={appointments}

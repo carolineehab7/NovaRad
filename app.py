@@ -126,6 +126,21 @@ try:
 except Exception as _e:
     print(f'Machine table outer note: {_e}')
 
+def ensure_appointment_radiologist_col():
+    conn = get_db(); cursor = conn.cursor()
+    try:
+        cursor.execute('ALTER TABLE appointment ADD COLUMN IF NOT EXISTS radiologist_id INT REFERENCES staff(staff_id)')
+        conn.commit()
+    except Exception as _e:
+        conn.rollback(); print(f'Appointment radiologist col note: {_e}')
+    finally:
+        cursor.close(); conn.close()
+
+try:
+    ensure_appointment_radiologist_col()
+except Exception as _e:
+    print(f'Appointment radiologist col outer note: {_e}')
+
 def login_required(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -267,7 +282,10 @@ def api_patient_dashboard():
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     cursor.execute('SELECT * FROM patient WHERE patient_id=%s', (patient_id,))
     patient = row_to_dict(cursor.fetchone())
-    cursor.execute('''SELECT appointment.*, staff.s_full_name as staff_name FROM appointment LEFT JOIN staff ON appointment.staff_id=staff.staff_id
+    cursor.execute('''SELECT appointment.*, t.s_full_name as staff_name, r.s_full_name as radiologist_name
+        FROM appointment
+        LEFT JOIN staff t ON appointment.staff_id=t.staff_id
+        LEFT JOIN staff r ON appointment.radiologist_id=r.staff_id
         WHERE appointment.patient_id=%s ORDER BY appointment.scheduled_datetime DESC LIMIT 5''', (patient_id,))
     appointments = rows_to_list(cursor.fetchall())
     cursor.execute('SELECT * FROM invoice WHERE patient_id=%s ORDER BY due_date DESC LIMIT 5', (patient_id,))
@@ -298,7 +316,10 @@ def api_patient_profile():
 def api_patient_appointments():
     patient_id = session['patient_id']
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cursor.execute('''SELECT appointment.*, staff.s_full_name as staff_name FROM appointment LEFT JOIN staff ON appointment.staff_id=staff.staff_id
+    cursor.execute('''SELECT appointment.*, t.s_full_name as staff_name, r.s_full_name as radiologist_name
+        FROM appointment
+        LEFT JOIN staff t ON appointment.staff_id=t.staff_id
+        LEFT JOIN staff r ON appointment.radiologist_id=r.staff_id
         WHERE appointment.patient_id=%s ORDER BY appointment.scheduled_datetime DESC''', (patient_id,))
     rows = rows_to_list(cursor.fetchall())
     cursor.close(); conn.close()
@@ -309,10 +330,51 @@ def api_patient_appointments():
 def api_book_appointment():
     patient_id = session['patient_id']
     request_data = request.get_json()
+    modality = request_data.get('modality', '')
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cursor.execute("SELECT staff_id FROM staff WHERE role IN ('receptionist','technician') LIMIT 1")
-    staff_result = cursor.fetchone()
-    staff_id = staff_result['staff_id'] if staff_result else None
+
+    # Match modality to department keyword, then fall back to any technician/receptionist
+    dept_keyword = {
+        'MRI':       'MRI',
+        'CT':        'CT',
+        'X-Ray':     'X-Ray',
+        'Ultrasound':'Ultrasound',
+    }.get(modality)
+
+    staff_id = None
+    if dept_keyword:
+        cursor.execute(
+            "SELECT staff_id FROM staff WHERE department ILIKE %s AND role IN ('technician','radiologist') LIMIT 1",
+            (f'%{dept_keyword}%',)
+        )
+        result = cursor.fetchone()
+        if result:
+            staff_id = result['staff_id']
+
+    if not staff_id:
+        cursor.execute("SELECT staff_id FROM staff WHERE role IN ('technician','receptionist') LIMIT 1")
+        result = cursor.fetchone()
+        if result:
+            staff_id = result['staff_id']
+
+    # Assign radiologist by department: standard imaging → Diagnostic, procedures → Interventional
+    rad_dept_keyword = {
+        'MRI':       'Diagnostic',
+        'CT':        'Diagnostic',
+        'X-Ray':     'Diagnostic',
+        'Ultrasound':'Diagnostic',
+    }.get(modality, 'Diagnostic')
+
+    cursor.execute(
+        "SELECT staff_id FROM staff WHERE role='radiologist' AND department ILIKE %s LIMIT 1",
+        (f'%{rad_dept_keyword}%',)
+    )
+    rad_result = cursor.fetchone()
+    if not rad_result:
+        cursor.execute("SELECT staff_id FROM staff WHERE role='radiologist' LIMIT 1")
+        rad_result = cursor.fetchone()
+    radiologist_id = rad_result['staff_id'] if rad_result else None
+
     scheduled_str = request_data.get('scheduled_datetime')
     try:
         scheduled_dt = datetime.fromisoformat(scheduled_str)
@@ -323,14 +385,14 @@ def api_book_appointment():
         cursor.close(); conn.close()
         return jsonify({'error': 'Appointment date must be in the future.'}), 400
     price_map = {'MRI': 1500, 'CT': 1200, 'X-Ray': 300, 'Ultrasound': 500}
-    amount = price_map.get(request_data.get('modality'), 800)
+    amount = price_map.get(modality, 800)
     due_date = (datetime.now() + timedelta(days=30)).date()
     try:
-        cursor.execute('INSERT INTO appointment (patient_id, staff_id, scheduled_datetime, modality, status) VALUES (%s,%s,%s,%s,%s) RETURNING appointment_id',
-                    (patient_id, staff_id, scheduled_dt, request_data.get('modality'), 'scheduled'))
+        cursor.execute('INSERT INTO appointment (patient_id, staff_id, radiologist_id, scheduled_datetime, modality, status) VALUES (%s,%s,%s,%s,%s,%s) RETURNING appointment_id',
+                    (patient_id, staff_id, radiologist_id, scheduled_dt, modality, 'scheduled'))
         appointment_id = cursor.fetchone()[0]
         cursor.execute('INSERT INTO imaging_order (appointment_id, referring_doctor, body_part, modality, order_status) VALUES (%s,%s,%s,%s,%s)',
-                    (appointment_id, request_data.get('referring_doctor'), request_data.get('body_part'), request_data.get('modality'), 'pending'))
+                    (appointment_id, request_data.get('referring_doctor'), request_data.get('body_part'), modality, 'pending'))
         cursor.execute('INSERT INTO invoice (patient_id, appointment_id, total_amount, status, due_date) VALUES (%s,%s,%s,%s,%s)',
                     (patient_id, appointment_id, amount, 'unpaid', due_date))
         conn.commit()
@@ -409,8 +471,13 @@ def api_staff_dashboard():
 @role_required('radiologist', 'technician', 'receptionist')
 def api_staff_appointments():
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cursor.execute('''SELECT appointment.*, patient.p_full_name as patient_name, patient.phone as patient_phone FROM appointment
-        JOIN patient ON appointment.patient_id=patient.patient_id ORDER BY appointment.scheduled_datetime DESC''')
+    cursor.execute('''SELECT appointment.*, patient.p_full_name as patient_name, patient.phone as patient_phone,
+        t.s_full_name as staff_name, r.s_full_name as radiologist_name
+        FROM appointment
+        JOIN patient ON appointment.patient_id=patient.patient_id
+        LEFT JOIN staff t ON appointment.staff_id=t.staff_id
+        LEFT JOIN staff r ON appointment.radiologist_id=r.staff_id
+        ORDER BY appointment.scheduled_datetime DESC''')
     rows = rows_to_list(cursor.fetchall())
     cursor.close(); conn.close()
     return jsonify(rows)
@@ -536,8 +603,12 @@ def api_admin_dashboard():
     cursor.execute("SELECT COUNT(*) as cnt FROM appointment WHERE status='scheduled'"); pending_appts = cursor.fetchone()['cnt']
     cursor.execute("SELECT COUNT(*) as cnt FROM invoice WHERE status='unpaid'"); unpaid_invoices = cursor.fetchone()['cnt']
     cursor.execute("SELECT COALESCE(SUM(total_amount),0) as total FROM invoice WHERE status='paid'"); total_revenue = cursor.fetchone()['total']
-    cursor.execute('''SELECT appointment.*, patient.p_full_name as patient_name, staff.s_full_name as staff_name FROM appointment
-        JOIN patient ON appointment.patient_id=patient.patient_id LEFT JOIN staff ON appointment.staff_id=staff.staff_id
+    cursor.execute('''SELECT appointment.*, patient.p_full_name as patient_name,
+        t.s_full_name as staff_name, r.s_full_name as radiologist_name
+        FROM appointment
+        JOIN patient ON appointment.patient_id=patient.patient_id
+        LEFT JOIN staff t ON appointment.staff_id=t.staff_id
+        LEFT JOIN staff r ON appointment.radiologist_id=r.staff_id
         ORDER BY appointment.scheduled_datetime DESC LIMIT 10''')
     recent_appts = rows_to_list(cursor.fetchall())
     cursor.close(); conn.close()
