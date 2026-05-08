@@ -481,7 +481,7 @@ def api_admin_staff():
         except Exception as e:
             conn.rollback(); cursor.close(); conn.close()
             return jsonify({'error': str(e)}), 400
-    cursor.execute('''SELECT staff.*, user.email, user.username FROM staff JOIN "user" ON staff.user_id=user.user_id ORDER BY staff.staff_id DESC''')
+    cursor.execute('''SELECT staff.*, u.email, u.username FROM staff JOIN "user" u ON staff.user_id=u.user_id ORDER BY staff.staff_id DESC''')
     rows = rows_to_list(cursor.fetchall())
     cursor.close(); conn.close()
     return jsonify(rows)
@@ -502,7 +502,7 @@ def api_delete_staff(staff_id):
 @role_required('admin')
 def api_admin_patients():
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cursor.execute('''SELECT patient.*, user.email, user.username FROM patient JOIN "user" ON patient.user_id=user.user_id ORDER BY patient.patient_id DESC''')
+    cursor.execute('''SELECT patient.*, u.email, u.username FROM patient JOIN "user" u ON patient.user_id=u.user_id ORDER BY patient.patient_id DESC''')
     rows = rows_to_list(cursor.fetchall())
     cursor.close(); conn.close()
     return jsonify(rows)

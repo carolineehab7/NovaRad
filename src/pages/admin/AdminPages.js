@@ -9,7 +9,7 @@ export function AdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    adminAPI.dashboard().then(r => setData(r.data)).finally(() => setLoading(false));
+    adminAPI.dashboard().then(r => setData(r.data)).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   if (loading) return <DashboardLayout title="Admin Dashboard"><Spinner /></DashboardLayout>;
@@ -49,7 +49,7 @@ export function AdminStaff() {
   const [form, setForm] = useState({ full_name: '', role: 'radiologist', department: '', username: '', email: '', password: '' });
   const [msg, setMsg] = useState({ text: '', type: '' });
 
-  const load = () => adminAPI.staff().then(r => setStaff(r.data)).finally(() => setLoading(false));
+  const load = () => adminAPI.staff().then(r => setStaff(r.data)).catch(() => {}).finally(() => setLoading(false));
   useEffect(() => { load(); }, []);
 
   const handleAdd = async (e) => {
@@ -131,7 +131,7 @@ export function AdminPatients() {
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    adminAPI.patients().then(r => setPatients(r.data)).finally(() => setLoading(false));
+    adminAPI.patients().then(r => setPatients(r.data)).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   const filtered = patients.filter(p =>
@@ -175,7 +175,7 @@ export function AdminBilling() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    adminAPI.billing().then(r => setData(r.data)).finally(() => setLoading(false));
+    adminAPI.billing().then(r => setData(r.data)).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   if (loading) return <DashboardLayout title="Billing"><Spinner /></DashboardLayout>;
@@ -212,7 +212,7 @@ export function AdminReports() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    adminAPI.reports().then(r => setReports(r.data)).finally(() => setLoading(false));
+    adminAPI.reports().then(r => setReports(r.data)).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   if (loading) return <DashboardLayout title="Radiology Reports"><Spinner /></DashboardLayout>;
