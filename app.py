@@ -6,10 +6,10 @@ import os
 from datetime import datetime, timedelta
 from functools import wraps
 
-PGHOST = 'ep-green-lake-a5nsemie.us-east-2.aws.neon.tech'
+PGHOST = 'ep-plain-cloud-ap59nxzp-pooler.c-7.us-east-1.aws.neon.tech'
 PGDATABASE = 'neondb'
 PGUSER = 'neondb_owner'
-PGPASSWORD = '4ZFkXlMWTJA2'
+PGPASSWORD = 'npg_86RoUyOKwgkF'
 
 # Serve React build
 REACT_BUILD = os.path.join(os.path.dirname(__file__), 'frontend', 'build')
@@ -20,81 +20,6 @@ def get_db():
     conn = psycopg2.connect(dbname=PGDATABASE, user=PGUSER, password=PGPASSWORD, host=PGHOST, port=5432)
     conn.autocommit = False
     return conn
-
-def init_db():
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS "user" (
-            user_id SERIAL PRIMARY KEY,
-            username VARCHAR(100) NOT NULL UNIQUE,
-            password VARCHAR(100) NOT NULL,
-            email VARCHAR(100) NOT NULL UNIQUE,
-            role VARCHAR(20) NOT NULL CHECK (role IN ('patient','radiologist','technician','receptionist','admin'))
-        );
-        CREATE TABLE IF NOT EXISTS patient (
-            patient_id SERIAL PRIMARY KEY,
-            user_id INT REFERENCES "user"(user_id) ON DELETE CASCADE,
-            p_full_name VARCHAR(100),
-            dob DATE,
-            gender CHAR(1),
-            phone CHAR(11),
-            address VARCHAR(100),
-            blood_type VARCHAR(5),
-            medical_history TEXT,
-            ssn VARCHAR(14) UNIQUE
-        );
-        CREATE TABLE IF NOT EXISTS staff (
-            staff_id SERIAL PRIMARY KEY,
-            user_id INT REFERENCES "user"(user_id) ON DELETE CASCADE,
-            s_full_name VARCHAR(100),
-            role VARCHAR(20) CHECK (role IN ('radiologist','technician','receptionist','admin')),
-            department VARCHAR(100)
-        );
-        CREATE TABLE IF NOT EXISTS appointment (
-            appointment_id SERIAL PRIMARY KEY,
-            patient_id INT REFERENCES patient(patient_id),
-            staff_id INT REFERENCES staff(staff_id),
-            scheduled_datetime TIMESTAMP,
-            modality VARCHAR(30),
-            status VARCHAR(20) DEFAULT 'scheduled' CHECK (status IN ('scheduled','completed','cancelled','waiting'))
-        );
-        CREATE TABLE IF NOT EXISTS imaging_order (
-            order_id SERIAL PRIMARY KEY,
-            appointment_id INT REFERENCES appointment(appointment_id),
-            referring_doctor VARCHAR(50),
-            body_part VARCHAR(30),
-            modality VARCHAR(30),
-            order_status VARCHAR(20) DEFAULT 'pending' CHECK (order_status IN ('pending','in_progress','completed'))
-        );
-        CREATE TABLE IF NOT EXISTS radiology_report (
-            report_id SERIAL PRIMARY KEY,
-            order_id INT REFERENCES imaging_order(order_id),
-            radiologist_id INT REFERENCES staff(staff_id),
-            findings_and_impression VARCHAR(3000),
-            report_date DATE DEFAULT CURRENT_DATE,
-            signed BOOLEAN DEFAULT FALSE
-        );
-        CREATE TABLE IF NOT EXISTS invoice (
-            invoice_id SERIAL PRIMARY KEY,
-            patient_id INT REFERENCES patient(patient_id),
-            appointment_id INT REFERENCES appointment(appointment_id),
-            total_amount INT,
-            status VARCHAR(20) DEFAULT 'unpaid' CHECK (status IN ('unpaid','paid')),
-            due_date DATE
-        );
-        CREATE TABLE IF NOT EXISTS medical_record (
-            record_id SERIAL PRIMARY KEY,
-            patient_id INT REFERENCES patient(patient_id),
-            staff_id INT REFERENCES staff(staff_id),
-            record_type VARCHAR(100),
-            description VARCHAR(3000),
-            date_created DATE DEFAULT CURRENT_DATE,
-            report_id INT REFERENCES radiology_report(report_id)
-        );
-    ''')
-    conn.commit()
-    cur.close(); conn.close()
 
 def login_required(func):
     @wraps(func)
