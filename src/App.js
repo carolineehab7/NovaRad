@@ -26,6 +26,7 @@ import StaffDashboard from './pages/staff/StaffDashboard';
 import StaffAppointments from './pages/staff/StaffAppointments';
 import ImagingOrders from './pages/staff/ImagingOrders';
 import RadiologyReport from './pages/staff/RadiologyReport';
+import Machines from './pages/staff/Machines';
 
 // Admin
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -68,6 +69,7 @@ function AppRoutes() {
       <Route path="/staff/appointments" element={<PrivateRoute roles={['radiologist','technician','receptionist']}><StaffAppointments /></PrivateRoute>} />
       <Route path="/staff/imaging-orders" element={<PrivateRoute roles={['radiologist','technician','receptionist']}><ImagingOrders /></PrivateRoute>} />
       <Route path="/staff/report/:orderId" element={<PrivateRoute roles={['radiologist']}><RadiologyReport /></PrivateRoute>} />
+      <Route path="/staff/machines" element={<PrivateRoute roles={['technician','admin']}><Machines /></PrivateRoute>} />
 
       {/* Admin */}
       <Route path="/admin/dashboard" element={<PrivateRoute roles={['admin']}><AdminDashboard /></PrivateRoute>} />

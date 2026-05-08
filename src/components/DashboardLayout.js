@@ -11,11 +11,21 @@ const patientLinks = [
   { path: '/patient/billing', icon: '◈', label: 'Billing' },
 ];
 
-const staffLinks = [
-  { path: '/staff/dashboard', icon: '⬡', label: 'Dashboard' },
-  { path: '/staff/appointments', icon: '◷', label: 'Appointments' },
-  { path: '/staff/imaging-orders', icon: '◎', label: 'Imaging Orders' },
-];
+const staffLinks = {
+  receptionist: [
+    { path: '/staff/dashboard',      icon: '⬡', label: 'Dashboard' },
+    { path: '/staff/appointments',   icon: '◷', label: 'Appointments' },
+  ],
+  technician: [
+    { path: '/staff/dashboard',      icon: '⬡', label: 'Dashboard' },
+    { path: '/staff/imaging-orders', icon: '◎', label: 'Imaging Orders' },
+    { path: '/staff/machines',       icon: '⚙', label: 'Machines' },
+  ],
+  radiologist: [
+    { path: '/staff/dashboard',      icon: '⬡', label: 'Dashboard' },
+    { path: '/staff/imaging-orders', icon: '◎', label: 'Imaging Orders' },
+  ],
+};
 
 const adminLinks = [
   { path: '/admin/dashboard', icon: '⬡', label: 'Dashboard' },
@@ -33,7 +43,8 @@ export default function DashboardLayout({ children, title }) {
 
   const links =
     user?.role === 'patient' ? patientLinks :
-    user?.role === 'admin' ? adminLinks : staffLinks;
+    user?.role === 'admin'   ? adminLinks :
+    staffLinks[user?.role]   || staffLinks.receptionist;
 
   const handleLogout = async () => {
     await logout();

@@ -85,6 +85,45 @@ try:
 except Exception as _e:
     print(f'Invoice status migration outer note: {_e}')
 
+def ensure_machine_table():
+    conn = get_db(); cursor = conn.cursor()
+    try:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS machine (
+                machine_id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                type VARCHAR(50) NOT NULL,
+                room VARCHAR(50),
+                status VARCHAR(20) DEFAULT 'available',
+                last_maintenance DATE,
+                notes TEXT
+            )
+        ''')
+        cursor.execute('SELECT COUNT(*) FROM machine')
+        if cursor.fetchone()[0] == 0:
+            cursor.executemany(
+                'INSERT INTO machine (name, type, room, status) VALUES (%s,%s,%s,%s)',
+                [
+                    ('MRI Scanner 1',    'MRI',       'Room 101', 'available'),
+                    ('MRI Scanner 2',    'MRI',       'Room 102', 'available'),
+                    ('CT Scanner 1',     'CT',        'Room 201', 'available'),
+                    ('X-Ray Unit 1',     'X-Ray',     'Room 301', 'available'),
+                    ('X-Ray Unit 2',     'X-Ray',     'Room 302', 'maintenance'),
+                    ('Ultrasound Unit 1','Ultrasound', 'Room 401', 'available'),
+                ]
+            )
+        conn.commit()
+    except Exception as _e:
+        conn.rollback()
+        print(f'Machine table note: {_e}')
+    finally:
+        cursor.close(); conn.close()
+
+try:
+    ensure_machine_table()
+except Exception as _e:
+    print(f'Machine table outer note: {_e}')
+
 def login_required(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -445,6 +484,32 @@ def api_radiology_report(order_id):
     except Exception as e:
         conn.rollback(); cursor.close(); conn.close()
         return jsonify({'error': str(e)}), 400
+
+@app.route('/api/staff/machines')
+@role_required('radiologist', 'technician', 'receptionist', 'admin')
+def api_get_machines():
+    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute('SELECT * FROM machine ORDER BY type, machine_id')
+    rows = rows_to_list(cursor.fetchall())
+    cursor.close(); conn.close()
+    return jsonify(rows)
+
+@app.route('/api/staff/machines/<int:machine_id>', methods=['PUT'])
+@role_required('technician', 'admin')
+def api_update_machine(machine_id):
+    data = request.get_json()
+    conn = get_db(); cursor = conn.cursor()
+    fields, vals = [], []
+    for col in ('status', 'notes', 'last_maintenance'):
+        if col in data:
+            fields.append(f'{col}=%s')
+            vals.append(data[col])
+    if not fields:
+        return jsonify({'error': 'Nothing to update'}), 400
+    vals.append(machine_id)
+    cursor.execute(f'UPDATE machine SET {", ".join(fields)} WHERE machine_id=%s', vals)
+    conn.commit(); cursor.close(); conn.close()
+    return jsonify({'ok': True})
 
 # ─── Admin API ──────────────────────────────────────────────────
 

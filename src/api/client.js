@@ -39,6 +39,8 @@ export const staffAPI = {
     return api.post(`/staff/upload-image/${orderId}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
   getImages: (orderId) => api.get(`/staff/images/${orderId}`),
+  getMachines: () => api.get('/staff/machines'),
+  updateMachine: (id, data) => api.put(`/staff/machines/${id}`, data),
 };
 
 export const adminAPI = {

@@ -426,3 +426,118 @@ export function RadiologyReport() {
     </DashboardLayout>
   );
 }
+
+/* ─── Machines ───────────────────────────────────────────────── */
+const STATUS_COLORS = {
+  available:   { bg: 'rgba(0,230,118,0.1)',  border: 'rgba(0,230,118,0.3)',  text: '#00e676' },
+  in_use:      { bg: 'rgba(13,79,168,0.2)',   border: 'rgba(100,181,246,0.4)', text: '#64b5f6' },
+  maintenance: { bg: 'rgba(255,179,0,0.1)',  border: 'rgba(255,179,0,0.3)',  text: '#ffb300' },
+};
+
+const MODALITY_ICONS = { MRI: '🧲', CT: '💿', 'X-Ray': '☢', Ultrasound: '🔊' };
+
+export function Machines() {
+  const { user } = useAuth();
+  const [machines, setMachines] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(null);
+
+  const load = () => staffAPI.getMachines().then(r => setMachines(r.data)).catch(() => {}).finally(() => setLoading(false));
+  useEffect(() => { load(); }, []);
+
+  const setStatus = async (machine_id, status) => {
+    setUpdating(machine_id);
+    await staffAPI.updateMachine(machine_id, { status });
+    await load();
+    setUpdating(null);
+  };
+
+  const canEdit = user?.role === 'technician' || user?.role === 'admin';
+
+  if (loading) return <DashboardLayout title="Machines"><Spinner /></DashboardLayout>;
+
+  const byType = machines.reduce((acc, m) => {
+    acc[m.type] = acc[m.type] || [];
+    acc[m.type].push(m);
+    return acc;
+  }, {});
+
+  return (
+    <DashboardLayout title="Imaging Machines">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 28 }}>
+        {['available','in_use','maintenance'].map(s => {
+          const c = STATUS_COLORS[s];
+          const count = machines.filter(m => m.status === s).length;
+          return (
+            <div key={s} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 14, padding: '18px 22px' }}>
+              <div style={{ fontSize: '0.68rem', color: c.text, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
+                {s.replace('_',' ')}
+              </div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '2rem', color: c.text }}>{count}</div>
+            </div>
+          );
+        })}
+        <div style={{ background: 'rgba(0,212,245,0.06)', border: '1px solid rgba(0,212,245,0.2)', borderRadius: 14, padding: '18px 22px' }}>
+          <div style={{ fontSize: '0.68rem', color: 'var(--nova-cyan)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Total</div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: '2rem', color: 'var(--nova-cyan)' }}>{machines.length}</div>
+        </div>
+      </div>
+
+      {Object.entries(byType).map(([type, list]) => (
+        <div key={type} style={{ marginBottom: 28 }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 14 }}>
+            {MODALITY_ICONS[type] || '◎'} {type} Machines
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px,1fr))', gap: 16 }}>
+            {list.map(m => {
+              const c = STATUS_COLORS[m.status] || STATUS_COLORS.available;
+              return (
+                <div key={m.machine_id} style={{
+                  background: 'linear-gradient(135deg, rgba(10,34,64,0.7), rgba(2,14,31,0.8))',
+                  border: `1px solid ${c.border}`, borderRadius: 16, padding: 22,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem' }}>{m.name}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 3 }}>{m.room}</div>
+                    </div>
+                    <span style={{ background: c.bg, border: `1px solid ${c.border}`, color: c.text, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '3px 10px', borderRadius: 20 }}>
+                      {m.status.replace('_',' ')}
+                    </span>
+                  </div>
+                  {m.notes && (
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 14 }}>{m.notes}</div>
+                  )}
+                  {m.last_maintenance && (
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: 14 }}>
+                      Last maintenance: {m.last_maintenance}
+                    </div>
+                  )}
+                  {canEdit && (
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {['available','in_use','maintenance'].filter(s => s !== m.status).map(s => (
+                        <button
+                          key={s}
+                          disabled={updating === m.machine_id}
+                          onClick={() => setStatus(m.machine_id, s)}
+                          style={{
+                            padding: '5px 12px', borderRadius: 8, border: `1px solid ${STATUS_COLORS[s].border}`,
+                            background: STATUS_COLORS[s].bg, color: STATUS_COLORS[s].text,
+                            fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-body)',
+                            opacity: updating === m.machine_id ? 0.5 : 1,
+                          }}
+                        >
+                          → {s.replace('_',' ')}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </DashboardLayout>
+  );
+}
