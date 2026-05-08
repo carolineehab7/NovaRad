@@ -70,6 +70,7 @@ html, body, #root {
 .badge-in_progress { background: rgba(13,79,168,0.3); color: #90caf9; border: 1px solid rgba(144,202,249,0.3); }
 .badge-paid      { background: rgba(0,230,118,0.15); color: var(--success); border: 1px solid rgba(0,230,118,0.3); }
 .badge-unpaid    { background: rgba(255,68,68,0.15); color: var(--danger); border: 1px solid rgba(255,68,68,0.3); }
+.badge-refunded  { background: rgba(156,39,176,0.15); color: #ce93d8; border: 1px solid rgba(156,39,176,0.3); }
 
 /* Animation */
 @keyframes fadeUp {

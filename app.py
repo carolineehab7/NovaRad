@@ -1,4 +1,4 @@
-from flask import Flask, session, request, jsonify, send_from_directory
+from flask import Flask, session, request, jsonify, send_from_directory, Response
 import psycopg2
 import psycopg2.extras
 import re
@@ -6,7 +6,6 @@ import os
 import uuid
 from datetime import datetime, timedelta
 from functools import wraps
-import anthropic
 
 # Load .env file if it exists (no external package needed)
 _env_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -23,10 +22,7 @@ PGDATABASE = 'neondb'
 PGUSER = 'neondb_owner'
 PGPASSWORD = 'npg_86RoUyOKwgkF'
 
-ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
-UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
 ALLOWED_IMAGE_EXTS = {'dcm', 'jpg', 'jpeg', 'png'}
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Serve React build
 REACT_BUILD = os.path.join(os.path.dirname(__file__), 'frontend', 'build')
@@ -47,15 +43,47 @@ def ensure_imaging_file_table():
             filename VARCHAR(255) NOT NULL,
             original_name VARCHAR(255),
             file_type VARCHAR(10),
+            file_data BYTEA,
             uploaded_at TIMESTAMP DEFAULT NOW()
         )
     ''')
+    cursor.execute('ALTER TABLE imaging_file ADD COLUMN IF NOT EXISTS file_data BYTEA')
     conn.commit(); cursor.close(); conn.close()
 
 try:
     ensure_imaging_file_table()
 except Exception as _e:
     print(f'imaging_file table note: {_e}')
+
+def ensure_invoice_refunded_status():
+    """Drop any CHECK constraint on invoice.status that doesn't include 'refunded', then recreate it."""
+    conn = get_db(); cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT tc.constraint_name
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.check_constraints cc ON tc.constraint_name = cc.constraint_name
+            WHERE tc.table_name = 'invoice'
+              AND tc.constraint_type = 'CHECK'
+              AND cc.check_clause LIKE '%status%'
+        """)
+        for (cname,) in cursor.fetchall():
+            cursor.execute(f'ALTER TABLE invoice DROP CONSTRAINT "{cname}"')
+        cursor.execute("""
+            ALTER TABLE invoice ADD CONSTRAINT invoice_status_check
+            CHECK (status IN ('unpaid', 'paid', 'refunded'))
+        """)
+        conn.commit()
+    except Exception as _e:
+        conn.rollback()
+        print(f'Invoice status migration note: {_e}')
+    finally:
+        cursor.close(); conn.close()
+
+try:
+    ensure_invoice_refunded_status()
+except Exception as _e:
+    print(f'Invoice status migration outer note: {_e}')
 
 def login_required(func):
     @wraps(func)
@@ -276,9 +304,17 @@ def api_book_appointment():
 def api_cancel_appointment(appointment_id):
     patient_id = session['patient_id']
     conn = get_db(); cursor = conn.cursor()
-    cursor.execute('UPDATE appointment SET status=%s WHERE appointment_id=%s AND patient_id=%s', ('cancelled', appointment_id, patient_id))
-    conn.commit(); cursor.close(); conn.close()
-    return jsonify({'ok': True})
+    try:
+        cursor.execute('UPDATE appointment SET status=%s WHERE appointment_id=%s AND patient_id=%s', ('cancelled', appointment_id, patient_id))
+        if cursor.rowcount == 0:
+            conn.rollback(); cursor.close(); conn.close()
+            return jsonify({'error': 'Appointment not found or already cancelled'}), 404
+        cursor.execute("UPDATE invoice SET status='refunded' WHERE appointment_id=%s AND status='paid'", (appointment_id,))
+        conn.commit(); cursor.close(); conn.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        conn.rollback(); cursor.close(); conn.close()
+        return jsonify({'error': str(e)}), 400
 
 @app.route('/api/patient/billing')
 @role_required('patient')
@@ -305,7 +341,7 @@ def api_pay_invoice(invoice_id):
 def api_patient_records():
     patient_id = session['patient_id']
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cursor.execute('''SELECT medical_record.*, radiology_report.findings_and_impression, radiology_report.report_date, radiology_report.signed, staff.s_full_name as staff_name
+    cursor.execute('''SELECT medical_record.*, radiology_report.findings_and_impression, radiology_report.report_date, radiology_report.signed, radiology_report.order_id, staff.s_full_name as staff_name
         FROM medical_record LEFT JOIN radiology_report ON medical_record.report_id=radiology_report.report_id
         LEFT JOIN staff ON medical_record.staff_id=staff.staff_id WHERE medical_record.patient_id=%s ORDER BY medical_record.date_created DESC''', (patient_id,))
     rows = rows_to_list(cursor.fetchall())
@@ -498,6 +534,7 @@ def api_admin_reports():
 @app.route('/api/staff/upload-image/<int:order_id>', methods=['POST'])
 @role_required('receptionist', 'technician', 'radiologist', 'admin')
 def api_upload_image(order_id):
+    import io
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
     f = request.files['file']
@@ -509,13 +546,11 @@ def api_upload_image(order_id):
 
     stored_ext = 'png' if ext == 'dcm' else ext
     stored_name = f"{uuid.uuid4().hex}.{stored_ext}"
-    dest = os.path.join(UPLOAD_FOLDER, stored_name)
 
     if ext == 'dcm':
         try:
             import pydicom, numpy as np
             from PIL import Image
-            import io
             ds = pydicom.dcmread(io.BytesIO(f.read()))
             arr = ds.pixel_array.astype(float)
             lo, hi = arr.min(), arr.max()
@@ -527,20 +562,22 @@ def api_upload_image(order_id):
                 img = Image.fromarray(arr, mode='L').convert('RGB')
             else:
                 img = Image.fromarray(arr)
-            img.save(dest)
+            buf = io.BytesIO()
+            img.save(buf, format='PNG')
+            file_bytes = buf.getvalue()
         except Exception as e:
             return jsonify({'error': f'DICOM conversion failed: {str(e)}'}), 400
     else:
-        f.save(dest)
+        file_bytes = f.read()
 
     conn = get_db(); cursor = conn.cursor()
     cursor.execute(
-        'INSERT INTO imaging_file (order_id, filename, original_name, file_type) VALUES (%s,%s,%s,%s) RETURNING file_id',
-        (order_id, stored_name, f.filename, ext)
+        'INSERT INTO imaging_file (order_id, filename, original_name, file_type, file_data) VALUES (%s,%s,%s,%s,%s) RETURNING file_id',
+        (order_id, stored_name, f.filename, stored_ext, psycopg2.Binary(file_bytes))
     )
     file_id = cursor.fetchone()[0]
     conn.commit(); cursor.close(); conn.close()
-    return jsonify({'ok': True, 'file_id': file_id, 'filename': stored_name})
+    return jsonify({'ok': True, 'file_id': file_id, 'filename': stored_name, 'url': f'/api/uploads/{stored_name}'})
 
 @app.route('/api/staff/images/<int:order_id>')
 @login_required
@@ -549,77 +586,141 @@ def api_get_images(order_id):
     cursor.execute('SELECT * FROM imaging_file WHERE order_id=%s ORDER BY uploaded_at', (order_id,))
     rows = rows_to_list(cursor.fetchall())
     cursor.close(); conn.close()
+    for row in rows:
+        row['url'] = f"/api/uploads/{row['filename']}"
     return jsonify(rows)
 
 @app.route('/api/uploads/<filename>')
 @login_required
 def serve_upload(filename):
     safe = os.path.basename(filename)
-    return send_from_directory(UPLOAD_FOLDER, safe)
+    conn = get_db(); cursor = conn.cursor()
+    cursor.execute('SELECT file_data, file_type FROM imaging_file WHERE filename=%s', (safe,))
+    row = cursor.fetchone()
+    cursor.close(); conn.close()
+    if not row or row[0] is None:
+        return jsonify({'error': 'Image not found'}), 404
+    mime = 'image/png' if row[1] in ('png', 'dcm') else f'image/{row[1]}'
+    return Response(bytes(row[0]), mimetype=mime)
 
-NOVA_SYSTEM_PROMPT = """You are Nova, the AI assistant for NovaRad Center — a radiology imaging center in Egypt.
-Help patients and staff with questions about services, booking, billing, and navigating the portal.
+NOVA_SCENARIOS = [
+    # Greetings
+    (['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'salam', 'السلام'],
+     "Hello! Welcome to NovaRad Center. I'm Nova, your assistant. I can help you book appointments, check service prices, pay invoices, view your results, or navigate the portal. What can I help you with today?"),
 
-Key facts:
-- Services & prices: MRI (1,500 EGP), CT Scan (1,200 EGP), X-Ray (300 EGP), Ultrasound (500 EGP)
-- Hours: Saturday–Thursday, 8 AM – 8 PM
-- Phone: 01117151930
-- Booking: Patient Dashboard → "Book Appointment" → choose modality, body part, date/time (must be future)
-- Payment: Billing section → "Pay Now" → enter Visa card details
-- Results: Medical Records tab — visible after the radiologist signs the report
-- Invoice: auto-generated on booking, due in 30 days
-- Cancel appointment: My Appointments page → Cancel button (only while status is "scheduled")
-- Staff can upload images and write radiology reports from the Staff portal
+    # How to book / booking steps
+    (['how to book', 'how do i book', 'how can i book', 'want to book', 'schedule appointment', 'make appointment', 'book appointment', 'new appointment'],
+     "To book an appointment:\n1. Log in to your Patient Dashboard\n2. Click 'Book Appointment' in the left sidebar\n3. Choose your imaging type (MRI, CT Scan, X-Ray, or Ultrasound)\n4. Enter the body part to be examined\n5. Pick any future date and time\n6. Click 'Confirm Appointment'\nAn invoice will be generated automatically and is due within 30 days."),
 
-Keep replies concise (2–4 sentences), friendly, and guide the user to the correct portal section.
-Never make up information not listed above."""
+    # Cancel appointment
+    (['cancel appointment', 'cancel my appointment', 'how to cancel', 'delete appointment', 'remove appointment'],
+     "To cancel an appointment:\n1. Go to 'My Appointments' in your dashboard\n2. Find the appointment you want to cancel\n3. Click the 'Cancel' button next to it\nNote: you can only cancel appointments that still have 'Scheduled' status. Once an appointment is completed or already cancelled, it cannot be changed."),
+
+    # Reschedule
+    (['reschedule', 'change appointment', 'change date', 'change time', 'move appointment'],
+     "To reschedule an appointment, you need to cancel the existing one first, then book a new appointment with your preferred date and time. Go to 'My Appointments' to cancel, then 'Book Appointment' to create a new one."),
+
+    # View appointments
+    (['my appointments', 'view appointments', 'see appointments', 'check appointments', 'appointment status', 'appointment list'],
+     "You can view all your appointments by clicking 'My Appointments' in the left sidebar of your Patient Dashboard. There you can see the date, modality, assigned staff, and current status of each appointment."),
+
+    # MRI
+    (['mri', 'magnetic resonance'],
+     "MRI (Magnetic Resonance Imaging) is available at NovaRad for 1,500 EGP. It provides detailed images of soft tissues and organs using magnetic fields — no radiation involved. To book an MRI: Patient Dashboard -> Book Appointment -> select MRI -> enter body part and preferred time."),
+
+    # CT
+    (['ct scan', 'ct-scan', 'computed tomography', ' ct '],
+     "CT Scan (Computed Tomography) is available at NovaRad for 1,200 EGP. It uses X-rays to create detailed cross-sectional images of the body. To book: Patient Dashboard -> Book Appointment -> select CT -> enter body part and preferred time."),
+
+    # X-Ray
+    (['x-ray', 'xray', 'x ray'],
+     "X-Ray is our fastest and most affordable service at 300 EGP. It is commonly used for bones, chest, and lungs. To book: Patient Dashboard -> Book Appointment -> select X-Ray -> enter body part and preferred time."),
+
+    # Ultrasound
+    (['ultrasound', 'sonography', 'echo'],
+     "Ultrasound imaging is available at NovaRad for 500 EGP. It uses sound waves to create images of organs and is completely safe with no radiation. To book: Patient Dashboard -> Book Appointment -> select Ultrasound -> enter body part and preferred time."),
+
+    # Prices / cost
+    (['price', 'cost', 'how much', 'fees', 'charges', 'tariff', 'كم', 'سعر'],
+     "Our service prices:\n- MRI: 1,500 EGP\n- CT Scan: 1,200 EGP\n- X-Ray: 300 EGP\n- Ultrasound: 500 EGP\nAll invoices are generated automatically when you book and are due within 30 days."),
+
+    # Payment / pay invoice
+    (['how to pay', 'pay invoice', 'pay bill', 'payment', 'pay now', 'online pay'],
+     "To pay an invoice:\n1. Go to 'Billing & Payments' in your dashboard sidebar\n2. Find the invoice marked as 'Unpaid'\n3. Click the 'Pay Now' button\n4. Enter your Visa card details (card number, name, expiry, CVV)\n5. Click 'Pay [amount] EGP' to confirm\nYour invoice status will update to 'Paid' instantly."),
+
+    # Billing / invoices
+    (['billing', 'invoice', 'bill', 'invoices', 'balance', 'outstanding'],
+     "Invoices are automatically created when you book an appointment. To view them, go to 'Billing & Payments' in your dashboard. You will see your total paid amount, outstanding balance, and a full invoice history. Click 'Pay Now' on any unpaid invoice to settle it."),
+
+    # Results / report
+    (['my results', 'see results', 'view results', 'get results', 'radiology report', 'scan results', 'imaging results'],
+     "Your radiology results appear in the 'Medical Records' section of your dashboard. They become visible only after the radiologist has written and digitally signed the report. Click on any record to expand it and read the full findings and clinical impression. If your record is signed, you will also see the uploaded scan images."),
+
+    # Medical records
+    (['medical record', 'my record', 'records', 'history', 'previous scan'],
+     "Your medical records are in the 'Medical Records' section of your Patient Dashboard. Each record includes the radiologist's findings and impression, the report date, and any uploaded scan images. Records only appear after the radiologist signs the report."),
+
+    # Images / scans
+    (['image', 'scan image', 'dicom', 'see image', 'view image', 'picture'],
+     "Scan images are attached to your medical records. To view them:\n1. Go to 'Medical Records' in your dashboard\n2. Click on a record to expand it\n3. You will see a grid of your scan images below the report\n4. Click any image to view it in full screen\nImages are uploaded by the technician or radiologist after your imaging session."),
+
+    # Registration
+    (['register', 'sign up', 'create account', 'new account', 'how to register'],
+     "To create a patient account:\n1. Go to the NovaRad login page\n2. Click 'Register'\n3. Fill in your personal details (name, SSN, phone, date of birth, etc.)\n4. Enter your email and choose a password\n5. Click 'Create Account'\nAfter registering, log in with your email and password to access your dashboard."),
+
+    # Login
+    (['login', 'log in', 'sign in', 'forgot password', 'cant login', "can't login"],
+     "To log in: go to the NovaRad homepage and click 'Login'. Enter your registered email address and password. If you do not have an account yet, click 'Register' to create one. Make sure you are using the correct email you registered with."),
+
+    # Profile / account
+    (['my profile', 'edit profile', 'update profile', 'change profile', 'personal info'],
+     "To view or update your profile, click 'My Profile' in your Patient Dashboard sidebar. You can update your phone number, address, blood type, and medical history. Click 'Save Changes' when done."),
+
+    # Contact
+    (['contact', 'phone', 'call', 'telephone', 'reach', 'تواصل'],
+     "You can reach NovaRad Center at:\n- Phone: 01117151930\n- Working hours: Saturday to Thursday, 8 AM to 8 PM\nFeel free to call us for any questions not covered in the portal."),
+
+    # Working hours
+    (['hours', 'working hours', 'open', 'opening', 'when open', 'schedule', 'timing'],
+     "NovaRad Center is open Saturday to Thursday from 8:00 AM to 8:00 PM. We are closed on Fridays. When booking appointments, you must select a future date and time within our working hours."),
+
+    # Staff / doctor / radiologist
+    (['doctor', 'radiologist', 'staff', 'technician', 'who will', 'assigned'],
+     "When you book an appointment, a staff member is automatically assigned to your case. The radiologist will perform your imaging session and write a detailed report. You will see the assigned staff name in your 'My Appointments' page."),
+
+    # Report not showing / waiting
+    (['not showing', 'not visible', 'where is my', 'waiting for', 'not ready', "can't see"],
+     "If your results are not showing yet, it means the radiologist has not signed the report yet. Reports become visible in 'Medical Records' only after the radiologist completes and digitally signs them. This usually happens within 1-2 business days after your imaging session."),
+
+    # Thank you
+    (['thank', 'thanks', 'thank you', 'shukran', 'شكرا'],
+     "You're welcome! If you have any other questions about your appointments, results, billing, or anything else, feel free to ask. NovaRad is here to help you."),
+
+    # General help
+    (['help', 'what can you do', 'what do you do', 'assist', 'support'],
+     "I'm Nova, your NovaRad assistant. Here is what I can help you with:\n- How to book, cancel, or reschedule appointments\n- Service prices (MRI, CT, X-Ray, Ultrasound)\n- How to pay invoices online\n- Viewing your radiology results and scan images\n- Understanding your medical records\n- Registration and login\n- Contacting the center\nJust type your question and I'll guide you!"),
+]
+
+def nova_reply(msg):
+    ml = msg.lower()
+    for keywords, reply in NOVA_SCENARIOS:
+        if any(k in ml for k in keywords):
+            return reply
+    return ("I'm not sure about that specific question, but I can help you with:\n"
+            "- Booking or cancelling appointments\n"
+            "- Service prices (MRI: 1,500 | CT: 1,200 | X-Ray: 300 | Ultrasound: 500 EGP)\n"
+            "- Paying invoices in the Billing section\n"
+            "- Viewing results in Medical Records\n"
+            "- Registration and login\n"
+            "For direct assistance, call us at 01117151930 (Sat-Thu, 8AM-8PM).")
 
 @app.route('/api/chatbot', methods=['POST'])
 def api_chatbot():
     body = request.get_json() or {}
     msg = body.get('message', '').strip()
-    history = body.get('history', [])
-
     if not msg:
-        return jsonify({'reply': 'Please type a message first.'})
-
-    if not ANTHROPIC_API_KEY:
-        keyword_map = {
-            'appointment': 'Book via Patient Dashboard → Book Appointment.',
-            'mri': 'MRI: 1,500 EGP. Book from your dashboard.',
-            'ct': 'CT Scan: 1,200 EGP. Book from your dashboard.',
-            'x-ray': 'X-Ray: 300 EGP — fastest service.',
-            'ultrasound': 'Ultrasound: 500 EGP.',
-            'billing': 'Billing section → Pay Now.',
-            'results': 'Medical Records tab after radiologist signs.',
-            'price': 'MRI: 1,500 | CT: 1,200 | X-Ray: 300 | Ultrasound: 500 EGP.',
-            'contact': 'Call 01117151930.',
-            'hours': 'Open Saturday–Thursday, 8AM–8PM.',
-        }
-        ml = msg.lower()
-        for k, v in keyword_map.items():
-            if k in ml:
-                return jsonify({'reply': v})
-        return jsonify({'reply': 'For assistance call 01117151930 or use the portal.'})
-
-    try:
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        messages = [{'role': m['role'], 'content': m['content']} for m in history[-10:]]
-        messages.append({'role': 'user', 'content': msg})
-        response = client.messages.create(
-            model='claude-haiku-4-5-20251001',
-            max_tokens=350,
-            system=NOVA_SYSTEM_PROMPT,
-            messages=messages,
-        )
-        return jsonify({'reply': response.content[0].text})
-    except Exception:
-        return jsonify({'reply': 'Sorry, I am unavailable right now. Call 01117151930 for help.'})
+        return jsonify({'reply': 'Please type a message.'})
+    return jsonify({'reply': nova_reply(msg)})
 
 if __name__ == '__main__':
-    try:
-        init_db()
-        print("Database initialized.")
-    except Exception as e:
-        print(f"DB warning: {e}")
     app.run(debug=True, port=5000)

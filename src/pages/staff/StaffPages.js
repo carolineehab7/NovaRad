@@ -339,11 +339,11 @@ export function RadiologyReport() {
                   {images.map(img => (
                     <div
                       key={img.file_id}
-                      onClick={() => setLightbox(`/api/uploads/${img.filename}`)}
+                      onClick={() => setLightbox(img.url)}
                       style={{ cursor: 'pointer', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)', aspectRatio: '1', background: '#000' }}
                     >
                       <img
-                        src={`/api/uploads/${img.filename}`}
+                        src={img.url}
                         alt={img.original_name}
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
