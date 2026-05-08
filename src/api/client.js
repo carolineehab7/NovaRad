@@ -32,6 +32,12 @@ export const staffAPI = {
   updateOrder: (id, data) => api.post(`/staff/update-order/${id}`, data),
   getReport: (orderId) => api.get(`/staff/radiology-report/${orderId}`),
   saveReport: (orderId, data) => api.post(`/staff/radiology-report/${orderId}`, data),
+  uploadImage: (orderId, file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post(`/staff/upload-image/${orderId}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  getImages: (orderId) => api.get(`/staff/images/${orderId}`),
 };
 
 export const adminAPI = {
@@ -45,7 +51,7 @@ export const adminAPI = {
 };
 
 export const chatbotAPI = {
-  send: (message) => api.post('/chatbot', { message }),
+  send: (message, history) => api.post('/chatbot', { message, history }),
 };
 
 export default api;

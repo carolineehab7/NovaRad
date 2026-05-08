@@ -209,20 +209,35 @@ export function Alert({ message, type = 'error', onClose }) {
 /* ─── Chatbot ─────────────────────────────────────────────────── */
 export function Chatbot() {
   const [open, setOpen] = useState(false);
-  const [msgs, setMsgs] = useState([{ from: 'bot', text: 'Hi! How can I help you today?' }]);
+  const [msgs, setMsgs] = useState([{ role: 'assistant', content: 'Hi! I\'m Nova, your NovaRad AI assistant. I can help you book appointments, check prices, understand billing, or navigate the portal. How can I help?' }]);
   const [input, setInput] = useState('');
+  const [thinking, setThinking] = useState(false);
+  const bottomRef = React.useRef(null);
+
+  React.useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [msgs, thinking]);
 
   const send = async () => {
-    if (!input.trim()) return;
-    const userMsg = input;
+    if (!input.trim() || thinking) return;
+    const userMsg = input.trim();
     setInput('');
-    setMsgs(m => [...m, { from: 'user', text: userMsg }]);
+    const next = [...msgs, { role: 'user', content: userMsg }];
+    setMsgs(next);
+    setThinking(true);
     try {
-      const res = await fetch('/api/chatbot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: userMsg }) });
+      const history = next.slice(0, -1).map(m => ({ role: m.role, content: m.content }));
+      const res = await fetch('/api/chatbot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userMsg, history }),
+      });
       const data = await res.json();
-      setMsgs(m => [...m, { from: 'bot', text: data.reply }]);
+      setMsgs(m => [...m, { role: 'assistant', content: data.reply }]);
     } catch {
-      setMsgs(m => [...m, { from: 'bot', text: 'Sorry, I could not connect right now.' }]);
+      setMsgs(m => [...m, { role: 'assistant', content: 'Sorry, I could not connect right now. Call 01117151930 for help.' }]);
+    } finally {
+      setThinking(false);
     }
   };
 
@@ -230,34 +245,51 @@ export function Chatbot() {
     <div style={{ position: 'fixed', bottom: 28, right: 28, zIndex: 999 }}>
       {open && (
         <div style={{
-          width: 320, marginBottom: 12,
+          width: 340, marginBottom: 12,
           background: 'linear-gradient(135deg, #061628, #020e1f)',
           border: '1px solid var(--border)', borderRadius: 20,
           boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
           overflow: 'hidden',
         }}>
-          <div style={{ background: 'linear-gradient(135deg, var(--nova-blue), var(--nova-mid))', padding: '14px 18px' }}>
-            <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.9rem' }}>✦ NovaRad Assistant</div>
-            <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>Always here to help</div>
+          <div style={{ background: 'linear-gradient(135deg, var(--nova-blue), var(--nova-mid))', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#00e676', boxShadow: '0 0 6px #00e676' }} />
+            <div>
+              <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.9rem' }}>✦ Nova — AI Assistant</div>
+              <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.7)', marginTop: 1 }}>Powered by Claude AI</div>
+            </div>
           </div>
-          <div style={{ height: 220, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ height: 280, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
             {msgs.map((m, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: m.from === 'user' ? 'flex-end' : 'flex-start' }}>
+              <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
                 <div style={{
-                  padding: '8px 12px', borderRadius: 14, maxWidth: '80%', fontSize: '0.82rem',
-                  background: m.from === 'user' ? 'var(--nova-blue)' : 'rgba(0,212,245,0.08)',
-                  color: m.from === 'user' ? '#fff' : 'var(--text-primary)',
-                  border: m.from === 'bot' ? '1px solid var(--border)' : 'none',
-                }}>{m.text}</div>
+                  padding: '9px 13px', borderRadius: 14, maxWidth: '82%', fontSize: '0.82rem', lineHeight: 1.5,
+                  background: m.role === 'user' ? 'var(--nova-blue)' : 'rgba(0,212,245,0.08)',
+                  color: m.role === 'user' ? '#fff' : 'var(--text-primary)',
+                  border: m.role === 'assistant' ? '1px solid var(--border)' : 'none',
+                }}>{m.content}</div>
               </div>
             ))}
+            {thinking && (
+              <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                <div style={{ padding: '9px 14px', borderRadius: 14, background: 'rgba(0,212,245,0.08)', border: '1px solid var(--border)', fontSize: '0.82rem', color: 'var(--text-muted)', display: 'flex', gap: 4, alignItems: 'center' }}>
+                  <span style={{ animation: 'pulse 1s infinite' }}>●</span>
+                  <span style={{ animation: 'pulse 1s infinite 0.2s' }}>●</span>
+                  <span style={{ animation: 'pulse 1s infinite 0.4s' }}>●</span>
+                </div>
+              </div>
+            )}
+            <div ref={bottomRef} />
           </div>
           <div style={{ padding: '10px 14px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8 }}>
-            <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()}
-              placeholder="Ask anything..."
-              style={{ flex: 1, background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 10, padding: '8px 12px', fontSize: '0.82rem', outline: 'none' }}
+            <input
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && send()}
+              placeholder="Ask about booking, prices, results..."
+              disabled={thinking}
+              style={{ flex: 1, background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 10, padding: '8px 12px', fontSize: '0.82rem', outline: 'none', opacity: thinking ? 0.6 : 1 }}
             />
-            <Button onClick={send} size="sm" variant="cyan">↑</Button>
+            <Button onClick={send} size="sm" variant="cyan" disabled={thinking}>↑</Button>
           </div>
         </div>
       )}

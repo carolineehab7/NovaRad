@@ -3,13 +3,20 @@ import psycopg2
 import psycopg2.extras
 import re
 import os
+import uuid
 from datetime import datetime, timedelta
 from functools import wraps
+import anthropic
 
 PGHOST = 'ep-plain-cloud-ap59nxzp-pooler.c-7.us-east-1.aws.neon.tech'
 PGDATABASE = 'neondb'
 PGUSER = 'neondb_owner'
 PGPASSWORD = 'npg_86RoUyOKwgkF'
+
+ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
+UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
+ALLOWED_IMAGE_EXTS = {'dcm', 'jpg', 'jpeg', 'png'}
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Serve React build
 REACT_BUILD = os.path.join(os.path.dirname(__file__), 'frontend', 'build')
@@ -20,6 +27,25 @@ def get_db():
     conn = psycopg2.connect(dbname=PGDATABASE, user=PGUSER, password=PGPASSWORD, host=PGHOST, port=5432)
     conn.autocommit = False
     return conn
+
+def ensure_imaging_file_table():
+    conn = get_db(); cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS imaging_file (
+            file_id SERIAL PRIMARY KEY,
+            order_id INT REFERENCES imaging_order(order_id) ON DELETE CASCADE,
+            filename VARCHAR(255) NOT NULL,
+            original_name VARCHAR(255),
+            file_type VARCHAR(10),
+            uploaded_at TIMESTAMP DEFAULT NOW()
+        )
+    ''')
+    conn.commit(); cursor.close(); conn.close()
+
+try:
+    ensure_imaging_file_table()
+except Exception as _e:
+    print(f'imaging_file table note: {_e}')
 
 def login_required(func):
     @wraps(func)
@@ -208,12 +234,21 @@ def api_book_appointment():
     cursor.execute("SELECT staff_id FROM staff WHERE role IN ('receptionist','technician') LIMIT 1")
     staff_result = cursor.fetchone()
     staff_id = staff_result['staff_id'] if staff_result else None
+    scheduled_str = request_data.get('scheduled_datetime')
+    try:
+        scheduled_dt = datetime.fromisoformat(scheduled_str)
+    except (TypeError, ValueError):
+        cursor.close(); conn.close()
+        return jsonify({'error': 'Invalid date format.'}), 400
+    if scheduled_dt <= datetime.now():
+        cursor.close(); conn.close()
+        return jsonify({'error': 'Appointment date must be in the future.'}), 400
     price_map = {'MRI': 1500, 'CT': 1200, 'X-Ray': 300, 'Ultrasound': 500}
     amount = price_map.get(request_data.get('modality'), 800)
     due_date = (datetime.now() + timedelta(days=30)).date()
     try:
         cursor.execute('INSERT INTO appointment (patient_id, staff_id, scheduled_datetime, modality, status) VALUES (%s,%s,%s,%s,%s) RETURNING appointment_id',
-                    (patient_id, staff_id, request_data.get('scheduled_datetime'), request_data.get('modality'), 'scheduled'))
+                    (patient_id, staff_id, scheduled_dt, request_data.get('modality'), 'scheduled'))
         appointment_id = cursor.fetchone()[0]
         cursor.execute('INSERT INTO imaging_order (appointment_id, referring_doctor, body_part, modality, order_status) VALUES (%s,%s,%s,%s,%s)',
                     (appointment_id, request_data.get('referring_doctor'), request_data.get('body_part'), request_data.get('modality'), 'pending'))
@@ -450,25 +485,126 @@ def api_admin_reports():
     cursor.close(); conn.close()
     return jsonify(rows)
 
+@app.route('/api/staff/upload-image/<int:order_id>', methods=['POST'])
+@role_required('receptionist', 'technician', 'radiologist', 'admin')
+def api_upload_image(order_id):
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    f = request.files['file']
+    if not f.filename:
+        return jsonify({'error': 'Empty filename'}), 400
+    ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else ''
+    if ext not in ALLOWED_IMAGE_EXTS:
+        return jsonify({'error': 'Invalid file type. Allowed: DCM, JPG, JPEG, PNG'}), 400
+
+    stored_ext = 'png' if ext == 'dcm' else ext
+    stored_name = f"{uuid.uuid4().hex}.{stored_ext}"
+    dest = os.path.join(UPLOAD_FOLDER, stored_name)
+
+    if ext == 'dcm':
+        try:
+            import pydicom, numpy as np
+            from PIL import Image
+            import io
+            ds = pydicom.dcmread(io.BytesIO(f.read()))
+            arr = ds.pixel_array.astype(float)
+            lo, hi = arr.min(), arr.max()
+            if hi > lo:
+                arr = ((arr - lo) / (hi - lo) * 255).astype(np.uint8)
+            else:
+                arr = arr.astype(np.uint8)
+            if arr.ndim == 2:
+                img = Image.fromarray(arr, mode='L').convert('RGB')
+            else:
+                img = Image.fromarray(arr)
+            img.save(dest)
+        except Exception as e:
+            return jsonify({'error': f'DICOM conversion failed: {str(e)}'}), 400
+    else:
+        f.save(dest)
+
+    conn = get_db(); cursor = conn.cursor()
+    cursor.execute(
+        'INSERT INTO imaging_file (order_id, filename, original_name, file_type) VALUES (%s,%s,%s,%s) RETURNING file_id',
+        (order_id, stored_name, f.filename, ext)
+    )
+    file_id = cursor.fetchone()[0]
+    conn.commit(); cursor.close(); conn.close()
+    return jsonify({'ok': True, 'file_id': file_id, 'filename': stored_name})
+
+@app.route('/api/staff/images/<int:order_id>')
+@login_required
+def api_get_images(order_id):
+    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute('SELECT * FROM imaging_file WHERE order_id=%s ORDER BY uploaded_at', (order_id,))
+    rows = rows_to_list(cursor.fetchall())
+    cursor.close(); conn.close()
+    return jsonify(rows)
+
+@app.route('/api/uploads/<filename>')
+@login_required
+def serve_upload(filename):
+    safe = os.path.basename(filename)
+    return send_from_directory(UPLOAD_FOLDER, safe)
+
+NOVA_SYSTEM_PROMPT = """You are Nova, the AI assistant for NovaRad Center — a radiology imaging center in Egypt.
+Help patients and staff with questions about services, booking, billing, and navigating the portal.
+
+Key facts:
+- Services & prices: MRI (1,500 EGP), CT Scan (1,200 EGP), X-Ray (300 EGP), Ultrasound (500 EGP)
+- Hours: Saturday–Thursday, 8 AM – 8 PM
+- Phone: 01117151930
+- Booking: Patient Dashboard → "Book Appointment" → choose modality, body part, date/time (must be future)
+- Payment: Billing section → "Pay Now" → enter Visa card details
+- Results: Medical Records tab — visible after the radiologist signs the report
+- Invoice: auto-generated on booking, due in 30 days
+- Cancel appointment: My Appointments page → Cancel button (only while status is "scheduled")
+- Staff can upload images and write radiology reports from the Staff portal
+
+Keep replies concise (2–4 sentences), friendly, and guide the user to the correct portal section.
+Never make up information not listed above."""
+
 @app.route('/api/chatbot', methods=['POST'])
 def api_chatbot():
-    msg = request.get_json().get('message', '').lower()
-    responses = {
-        'appointment': 'You can book appointments from your Patient Dashboard under "Book Appointment".',
-        'mri': 'MRI is available at NovaRad. Book via your dashboard. Price: 1,500 EGP.',
-        'ct': 'CT Scan is available. Price: 1,200 EGP. Book through your patient portal.',
-        'x-ray': 'Digital X-Ray is one of our fastest services. Price: 300 EGP.',
-        'ultrasound': 'Ultrasound imaging is available. Price: 500 EGP.',
-        'billing': 'View and pay invoices from the Billing section in your dashboard.',
-        'results': 'Your radiology results appear in Medical Records once signed by the radiologist.',
-        'contact': 'Call us at 01117151930.',
-        'hours': 'NovaRad is open Saturday-Thursday, 8AM-8PM.',
-        'price': 'MRI: 1,500 | CT: 1,200 | X-Ray: 300 | Ultrasound: 500 (all in EGP)',
-    }
-    for key, reply in responses.items():
-        if key in msg:
-            return jsonify({'reply': reply})
-    return jsonify({'reply': 'Thank you! For immediate assistance, call 01117151930 or log into your patient portal.'})
+    body = request.get_json() or {}
+    msg = body.get('message', '').strip()
+    history = body.get('history', [])
+
+    if not msg:
+        return jsonify({'reply': 'Please type a message first.'})
+
+    if not ANTHROPIC_API_KEY:
+        keyword_map = {
+            'appointment': 'Book via Patient Dashboard → Book Appointment.',
+            'mri': 'MRI: 1,500 EGP. Book from your dashboard.',
+            'ct': 'CT Scan: 1,200 EGP. Book from your dashboard.',
+            'x-ray': 'X-Ray: 300 EGP — fastest service.',
+            'ultrasound': 'Ultrasound: 500 EGP.',
+            'billing': 'Billing section → Pay Now.',
+            'results': 'Medical Records tab after radiologist signs.',
+            'price': 'MRI: 1,500 | CT: 1,200 | X-Ray: 300 | Ultrasound: 500 EGP.',
+            'contact': 'Call 01117151930.',
+            'hours': 'Open Saturday–Thursday, 8AM–8PM.',
+        }
+        ml = msg.lower()
+        for k, v in keyword_map.items():
+            if k in ml:
+                return jsonify({'reply': v})
+        return jsonify({'reply': 'For assistance call 01117151930 or use the portal.'})
+
+    try:
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        messages = [{'role': m['role'], 'content': m['content']} for m in history[-10:]]
+        messages.append({'role': 'user', 'content': msg})
+        response = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=350,
+            system=NOVA_SYSTEM_PROMPT,
+            messages=messages,
+        )
+        return jsonify({'reply': response.content[0].text})
+    except Exception:
+        return jsonify({'reply': 'Sorry, I am unavailable right now. Call 01117151930 for help.'})
 
 if __name__ == '__main__':
     try:

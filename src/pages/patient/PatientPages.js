@@ -99,7 +99,14 @@ export function BookAppointment() {
               </div>
               <div>
                 <label style={labelStyle}>Preferred Date & Time *</label>
-                <input type="datetime-local" value={form.scheduled_datetime} onChange={e => setForm({ ...form, scheduled_datetime: e.target.value })} required style={fieldStyle} />
+                <input
+                  type="datetime-local"
+                  value={form.scheduled_datetime}
+                  onChange={e => setForm({ ...form, scheduled_datetime: e.target.value })}
+                  required
+                  min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                  style={fieldStyle}
+                />
               </div>
               <Button type="submit" variant="cyan" disabled={loading} style={{ width: '100%', justifyContent: 'center', padding: '14px' }}>
                 {loading ? 'Booking...' : 'Confirm Appointment →'}
@@ -137,17 +144,150 @@ export function BookAppointment() {
   );
 }
 
+const MAGIC_CARD = '4111111111111111';
+
+function PaymentModal({ invoice, onSuccess, onClose }) {
+  const [card, setCard] = useState({ number: '', expiry: '', cvv: '', name: '' });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const fieldStyle = {
+    width: '100%', padding: '11px 14px',
+    background: 'rgba(0,0,0,0.35)', border: '1px solid var(--border)',
+    borderRadius: 10, color: 'var(--text-primary)', fontSize: '0.875rem',
+    fontFamily: 'var(--font-body)', outline: 'none', boxSizing: 'border-box',
+  };
+  const labelStyle = { fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 };
+
+  const formatCardNumber = (v) => v.replace(/\D/g, '').slice(0, 16).replace(/(.{4})/g, '$1 ').trim();
+  const formatExpiry = (v) => {
+    const d = v.replace(/\D/g, '').slice(0, 4);
+    return d.length > 2 ? d.slice(0, 2) + '/' + d.slice(2) : d;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    const raw = card.number.replace(/\s/g, '');
+    if (raw !== MAGIC_CARD) {
+      setError('Card declined. Please check your card number and try again.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await patientAPI.payInvoice(invoice.invoice_id);
+      onSuccess();
+    } catch {
+      setError('Payment failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+    }} onClick={onClose}>
+      <div style={{
+        background: 'linear-gradient(135deg, #061628, #0a2240)',
+        border: '1px solid rgba(0,212,245,0.25)', borderRadius: 20,
+        padding: 36, width: '100%', maxWidth: 440,
+        boxShadow: '0 24px 80px rgba(0,0,0,0.6)',
+      }} onClick={e => e.stopPropagation()}>
+        {/* Card graphic */}
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(0,212,245,0.15), rgba(10,34,64,0.8))',
+          border: '1px solid rgba(0,212,245,0.2)', borderRadius: 14,
+          padding: '20px 24px', marginBottom: 28, position: 'relative',
+        }}>
+          <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 12 }}>VISA</div>
+          <div style={{ fontFamily: 'monospace', fontSize: '1.15rem', color: 'var(--text-primary)', letterSpacing: '0.2em', marginBottom: 16 }}>
+            {card.number || '•••• •••• •••• ••••'}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+            <div>
+              <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginBottom: 2 }}>CARDHOLDER</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-primary)', textTransform: 'uppercase' }}>{card.name || 'YOUR NAME'}</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginBottom: 2 }}>EXPIRES</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-primary)' }}>{card.expiry || 'MM/YY'}</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '1rem', marginBottom: 4 }}>Complete Payment</div>
+          <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+            Invoice INV-{invoice.invoice_id} · <span style={{ color: 'var(--nova-cyan)', fontWeight: 600 }}>{(invoice.total_amount || 0).toLocaleString()} EGP</span>
+          </div>
+        </div>
+
+        {error && (
+          <div style={{ background: 'rgba(255,68,68,0.1)', border: '1px solid rgba(255,68,68,0.3)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: '0.82rem', color: 'var(--danger)' }}>
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <label style={labelStyle}>Card Number</label>
+            <input
+              type="text" inputMode="numeric" placeholder="1234 5678 9012 3456"
+              value={card.number}
+              onChange={e => setCard({ ...card, number: formatCardNumber(e.target.value) })}
+              required style={{ ...fieldStyle, fontFamily: 'monospace', letterSpacing: '0.1em' }}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>Cardholder Name</label>
+            <input
+              type="text" placeholder="Name on card"
+              value={card.name}
+              onChange={e => setCard({ ...card, name: e.target.value })}
+              required style={fieldStyle}
+            />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={labelStyle}>Expiry Date</label>
+              <input
+                type="text" placeholder="MM/YY"
+                value={card.expiry}
+                onChange={e => setCard({ ...card, expiry: formatExpiry(e.target.value) })}
+                required style={fieldStyle}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>CVV</label>
+              <input
+                type="text" inputMode="numeric" placeholder="•••"
+                value={card.cvv}
+                onChange={e => setCard({ ...card, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                required style={fieldStyle}
+              />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
+            <Button type="button" variant="ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={onClose}>Cancel</Button>
+            <Button type="submit" variant="success" disabled={loading} style={{ flex: 2, justifyContent: 'center', padding: '13px' }}>
+              {loading ? 'Processing...' : `Pay ${(invoice.total_amount || 0).toLocaleString()} EGP`}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export function PatientBilling() {
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [payingInvoice, setPayingInvoice] = useState(null);
 
   const load = () => patientAPI.billing().then(r => setInvoices(r.data)).finally(() => setLoading(false));
   useEffect(() => { load(); }, []);
-
-  const pay = async (id) => {
-    await patientAPI.payInvoice(id);
-    load();
-  };
 
   if (loading) return <DashboardLayout title="Billing"><Spinner /></DashboardLayout>;
 
@@ -156,13 +296,21 @@ export function PatientBilling() {
 
   return (
     <DashboardLayout title="Billing & Payments">
+      {payingInvoice && (
+        <PaymentModal
+          invoice={payingInvoice}
+          onSuccess={() => { setPayingInvoice(null); load(); }}
+          onClose={() => setPayingInvoice(null)}
+        />
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 28 }}>
         <div style={{ background: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.2)', borderRadius: 14, padding: 24 }}>
           <div style={{ fontSize: '0.72rem', color: 'var(--success)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Total Paid</div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: '2rem', color: 'var(--success)' }}>{totalPaid.toLocaleString()} <span style={{ fontSize: '0.9rem' }}>EGP</span></div>
         </div>
         <div style={{ background: 'rgba(255,68,68,0.06)', border: '1px solid rgba(255,68,68,0.2)', borderRadius: 14, padding: 24 }}>
-          <div style={{ fontSize: '0.72rex', color: 'var(--danger)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6, fontSize: '0.72rem' }}>Outstanding Balance</div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--danger)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Outstanding Balance</div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: '2rem', color: 'var(--danger)' }}>{totalUnpaid.toLocaleString()} <span style={{ fontSize: '0.9rem' }}>EGP</span></div>
         </div>
         <div style={{ background: 'rgba(0,212,245,0.06)', border: '1px solid rgba(0,212,245,0.2)', borderRadius: 14, padding: 24 }}>
@@ -184,7 +332,7 @@ export function PatientBilling() {
           data={invoices}
           emptyMsg="No invoices found"
           actions={(row) => row.status === 'unpaid' ? (
-            <Button size="sm" variant="success" onClick={() => pay(row.invoice_id)}>Pay Now</Button>
+            <Button size="sm" variant="success" onClick={() => setPayingInvoice(row)}>Pay Now</Button>
           ) : <span style={{ color: 'var(--success)', fontSize: '0.85rem' }}>✓ Paid</span>}
         />
       </Card>

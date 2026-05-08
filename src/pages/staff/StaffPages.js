@@ -115,6 +115,10 @@ export function ImagingOrders() {
   const { user } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [uploadingId, setUploadingId] = useState(null);
+  const [uploadMsg, setUploadMsg] = useState('');
+  const fileInputRef = React.useRef(null);
+  const [pendingOrderId, setPendingOrderId] = useState(null);
 
   const load = () => staffAPI.imagingOrders().then(r => setOrders(r.data)).finally(() => setLoading(false));
   useEffect(() => { load(); }, []);
@@ -124,10 +128,49 @@ export function ImagingOrders() {
     load();
   };
 
+  const triggerUpload = (orderId) => {
+    setPendingOrderId(orderId);
+    fileInputRef.current.value = '';
+    fileInputRef.current.click();
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !pendingOrderId) return;
+    setUploadingId(pendingOrderId);
+    setUploadMsg('');
+    try {
+      await staffAPI.uploadImage(pendingOrderId, file);
+      setUploadMsg(`Image uploaded successfully for order #${pendingOrderId}`);
+    } catch (err) {
+      setUploadMsg(err.response?.data?.error || 'Upload failed.');
+    } finally {
+      setUploadingId(null);
+      setPendingOrderId(null);
+    }
+  };
+
   if (loading) return <DashboardLayout title="Imaging Orders"><Spinner /></DashboardLayout>;
 
   return (
     <DashboardLayout title="Imaging Order Management">
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept=".dcm,.jpg,.jpeg,.png"
+        style={{ display: 'none' }}
+        onChange={handleFileChange}
+      />
+      {uploadMsg && (
+        <div style={{
+          marginBottom: 16, padding: '10px 16px', borderRadius: 10,
+          background: uploadMsg.includes('success') ? 'rgba(0,230,118,0.08)' : 'rgba(255,68,68,0.08)',
+          border: `1px solid ${uploadMsg.includes('success') ? 'rgba(0,230,118,0.25)' : 'rgba(255,68,68,0.25)'}`,
+          color: uploadMsg.includes('success') ? 'var(--success)' : 'var(--danger)', fontSize: '0.85rem',
+        }}>
+          {uploadMsg}
+        </div>
+      )}
       <Card title={`All Imaging Orders (${orders.length})`}>
         <DataTable
           columns={[
@@ -150,15 +193,24 @@ export function ImagingOrders() {
           data={orders}
           emptyMsg="No imaging orders"
           actions={(row) => (
-            <select
-              value={row.order_status}
-              onChange={e => updateOrder(row.order_id, e.target.value)}
-              style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 8, padding: '6px 10px', fontSize: '0.8rem', fontFamily: 'var(--font-body)' }}
-            >
-              {['pending', 'in_progress', 'completed'].map(s => (
-                <option key={s} value={s} style={{ background: '#061628' }}>{s.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
-              ))}
-            </select>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <select
+                value={row.order_status}
+                onChange={e => updateOrder(row.order_id, e.target.value)}
+                style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 8, padding: '6px 10px', fontSize: '0.8rem', fontFamily: 'var(--font-body)' }}
+              >
+                {['pending', 'in_progress', 'completed'].map(s => (
+                  <option key={s} value={s} style={{ background: '#061628' }}>{s.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
+                ))}
+              </select>
+              <Button
+                size="sm" variant="ghost"
+                onClick={() => triggerUpload(row.order_id)}
+                disabled={uploadingId === row.order_id}
+              >
+                {uploadingId === row.order_id ? '...' : '⬆ Image'}
+              </Button>
+            </div>
           )}
         />
       </Card>
@@ -176,6 +228,12 @@ export function RadiologyReport() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState({ text: '', type: '' });
+  const [images, setImages] = useState([]);
+  const [lightbox, setLightbox] = useState(null);
+  const fileInputRef = React.useRef(null);
+  const [uploading, setUploading] = useState(false);
+
+  const loadImages = () => staffAPI.getImages(orderId).then(r => setImages(r.data)).catch(() => {});
 
   useEffect(() => {
     staffAPI.getReport(orderId).then(r => {
@@ -185,7 +243,22 @@ export function RadiologyReport() {
         setSigned(r.data.report.signed || false);
       }
     }).finally(() => setLoading(false));
+    loadImages();
   }, [orderId]);
+
+  const handleUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      await staffAPI.uploadImage(orderId, file);
+      await loadImages();
+    } catch (err) {
+      setMsg({ text: err.response?.data?.error || 'Upload failed.', type: 'error' });
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -214,8 +287,21 @@ export function RadiologyReport() {
 
   return (
     <DashboardLayout title="Write Radiology Report">
+      {/* Lightbox */}
+      {lightbox && (
+        <div
+          onClick={() => setLightbox(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+        >
+          <img src={lightbox} alt="scan" style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 10, objectFit: 'contain' }} />
+          <button onClick={() => setLightbox(null)} style={{ position: 'absolute', top: 20, right: 28, background: 'none', border: 'none', color: '#fff', fontSize: '1.8rem', cursor: 'pointer' }}>✕</button>
+        </div>
+      )}
+
+      <input type="file" ref={fileInputRef} accept=".dcm,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleUpload} />
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 24 }}>
-        {/* Order Info */}
+        {/* Order Info + Images */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <Card title="Order Details">
             <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -236,6 +322,38 @@ export function RadiologyReport() {
               ))}
             </div>
           </Card>
+
+          {/* Images panel */}
+          <Card title={`Imaging Files (${images.length})`} titleRight={
+            <Button size="sm" variant="ghost" onClick={() => { fileInputRef.current.value = ''; fileInputRef.current.click(); }} disabled={uploading}>
+              {uploading ? '...' : '⬆ Upload'}
+            </Button>
+          }>
+            <div style={{ padding: 16 }}>
+              {images.length === 0 ? (
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '20px 0' }}>
+                  No images uploaded yet.<br />Accepts DCM, JPG, PNG.
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {images.map(img => (
+                    <div
+                      key={img.file_id}
+                      onClick={() => setLightbox(`/api/uploads/${img.filename}`)}
+                      style={{ cursor: 'pointer', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)', aspectRatio: '1', background: '#000' }}
+                    >
+                      <img
+                        src={`/api/uploads/${img.filename}`}
+                        alt={img.original_name}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </Card>
+
           {data?.report && (
             <div style={{ background: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.2)', borderRadius: 14, padding: 20 }}>
               <div style={{ fontSize: '0.72rem', color: 'var(--success)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Existing Report</div>
