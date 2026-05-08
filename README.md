@@ -215,6 +215,22 @@ npm install
 
 ### Development Mode
 
+Run both backend and frontend simultaneously with one command:
+
+```bash
+npm run dev
+```
+
+This uses `concurrently` to start:
+- **Flask Backend** on Port 5000
+- **React Frontend** on Port 3000
+
+The React app will automatically proxy API calls to Flask on port 5000.
+
+### Alternative: Separate Terminals
+
+If you prefer to run them in separate terminals:
+
 #### Terminal 1 - Flask Backend (Port 5000)
 
 ```bash
@@ -227,8 +243,6 @@ python app.py
 ```bash
 npm start
 ```
-
-The React app will automatically proxy API calls to Flask on port 5000.
 
 ### Production Build
 
