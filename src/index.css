@@ -20,8 +20,10 @@
   --success: #00e676;
   --warning: #ffb300;
   --danger: #ff4444;
-  --font-display: 'DM Serif Display', serif;
-  --font-body: 'Outfit', sans-serif;
+  --font-display: 'Segoe UI', 'Segoe UI Variable', 'Noto Sans', Arial, sans-serif;
+  --font-body: 'Segoe UI', 'Segoe UI Variable', 'Noto Sans', Arial, sans-serif;
+  --page-max: 1240px;
+  --page-gutter: 28px;
   --radius: 12px;
   --radius-lg: 20px;
   --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -33,6 +35,10 @@ html, body, #root {
   background: var(--nova-deep);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: var(--font-body);
 }
 
 /* Scrollbar */

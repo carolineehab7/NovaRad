@@ -8,9 +8,15 @@
   --border-color: #e0e0e0;         /* Light Gray for borders */
   --dropdown-bg: #ffffff;          /* Added for dropdowns */
   --bgcolor: #f8f8f8;              /* Added for consistency */
+  --mainfont: 'Segoe UI', Arial, sans-serif;
 }
 body, html {
   overflow: visible; /* Ensure scrolling is not restricted */
+  font-family: var(--mainfont);
+}
+
+* {
+  font-family: var(--mainfont);
 }
 
 header {

@@ -23,9 +23,22 @@ PGUSER = 'neondb_owner'
 PGPASSWORD = 'npg_86RoUyOKwgkF'
 
 ALLOWED_IMAGE_EXTS = {'dcm', 'jpg', 'jpeg', 'png'}
+BOOKING_START_HOUR = 9
+BOOKING_END_HOUR = 22  # Exclusive; last slot starts at 21:00
+
+
+def generate_hourly_slots():
+    return [f'{h:02d}:00' for h in range(BOOKING_START_HOUR, BOOKING_END_HOUR)]
+
+
+def is_valid_booking_slot(dt):
+    return (
+        BOOKING_START_HOUR <= dt.hour < BOOKING_END_HOUR and
+        dt.minute == 0 and dt.second == 0 and dt.microsecond == 0
+    )
 
 # Serve React build
-REACT_BUILD = os.path.join(os.path.dirname(__file__), 'frontend', 'build')
+REACT_BUILD = os.path.join(os.path.dirname(__file__), 'build')
 app = Flask(__name__, static_folder=REACT_BUILD, static_url_path='/')
 app.secret_key = 'novarad_secret_2026'
 
@@ -325,6 +338,56 @@ def api_patient_appointments():
     cursor.close(); conn.close()
     return jsonify(rows)
 
+
+@app.route('/api/patient/referring-doctors')
+@role_required('patient')
+def api_patient_referring_doctors():
+    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute('''
+        SELECT staff_id, s_full_name, department
+        FROM staff
+        WHERE role='radiologist'
+        ORDER BY s_full_name ASC
+    ''')
+    rows = rows_to_list(cursor.fetchall())
+    cursor.close(); conn.close()
+    return jsonify(rows)
+
+
+@app.route('/api/patient/available-slots')
+@role_required('patient')
+def api_patient_available_slots():
+    date_str = (request.args.get('date') or '').strip()
+    if not date_str:
+        return jsonify({'error': 'date is required (YYYY-MM-DD)'}), 400
+    try:
+        selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD.'}), 400
+
+    now = datetime.now()
+    all_slots = generate_hourly_slots()
+
+    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute('''
+        SELECT scheduled_datetime
+        FROM appointment
+        WHERE DATE(scheduled_datetime)=%s AND status!='cancelled'
+    ''', (selected_date,))
+    taken = {f"{r['scheduled_datetime'].hour:02d}:{r['scheduled_datetime'].minute:02d}" for r in cursor.fetchall()}
+    cursor.close(); conn.close()
+
+    available = []
+    for s in all_slots:
+        slot_dt = datetime.fromisoformat(f'{selected_date.isoformat()}T{s}:00')
+        if s in taken:
+            continue
+        if slot_dt <= now:
+            continue
+        available.append(s)
+
+    return jsonify({'date': selected_date.isoformat(), 'slots': available})
+
 @app.route('/api/patient/book-appointment', methods=['POST'])
 @role_required('patient')
 def api_book_appointment():
@@ -384,6 +447,18 @@ def api_book_appointment():
     if scheduled_dt <= datetime.now():
         cursor.close(); conn.close()
         return jsonify({'error': 'Appointment date must be in the future.'}), 400
+    if not is_valid_booking_slot(scheduled_dt):
+        cursor.close(); conn.close()
+        return jsonify({'error': 'Appointments are only available hourly from 09:00 to 21:00.'}), 400
+
+    cursor.execute(
+        "SELECT 1 FROM appointment WHERE scheduled_datetime=%s AND status!='cancelled' LIMIT 1",
+        (scheduled_dt,)
+    )
+    if cursor.fetchone():
+        cursor.close(); conn.close()
+        return jsonify({'error': 'This time slot is no longer available. Please choose another slot.'}), 400
+
     price_map = {'MRI': 1500, 'CT': 1200, 'X-Ray': 300, 'Ultrasound': 500}
     amount = price_map.get(modality, 800)
     due_date = (datetime.now() + timedelta(days=30)).date()
