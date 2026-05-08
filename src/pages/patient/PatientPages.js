@@ -13,8 +13,12 @@ export function PatientAppointments() {
 
   const cancel = async (id) => {
     if (!window.confirm('Cancel this appointment?')) return;
-    await patientAPI.cancelAppointment(id);
-    load();
+    try {
+      await patientAPI.cancelAppointment(id);
+      load();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to cancel appointment.');
+    }
   };
 
   if (loading) return <DashboardLayout title="Appointments"><Spinner /></DashboardLayout>;
@@ -146,7 +150,7 @@ export function BookAppointment() {
 
 const MAGIC_CARD = '4111111111111111';
 
-function PaymentModal({ invoice, onSuccess, onClose }) {
+export function PaymentModal({ invoice, onSuccess, onClose }) {
   const [card, setCard] = useState({ number: '', expiry: '', cvv: '', name: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -293,6 +297,7 @@ export function PatientBilling() {
 
   const totalPaid = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (i.total_amount || 0), 0);
   const totalUnpaid = invoices.filter(i => i.status === 'unpaid').reduce((s, i) => s + (i.total_amount || 0), 0);
+  const totalRefunded = invoices.filter(i => i.status === 'refunded').reduce((s, i) => s + (i.total_amount || 0), 0);
 
   return (
     <DashboardLayout title="Billing & Payments">
@@ -304,7 +309,7 @@ export function PatientBilling() {
         />
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 28 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, marginBottom: 28 }}>
         <div style={{ background: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.2)', borderRadius: 14, padding: 24 }}>
           <div style={{ fontSize: '0.72rem', color: 'var(--success)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Total Paid</div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: '2rem', color: 'var(--success)' }}>{totalPaid.toLocaleString()} <span style={{ fontSize: '0.9rem' }}>EGP</span></div>
@@ -312,6 +317,10 @@ export function PatientBilling() {
         <div style={{ background: 'rgba(255,68,68,0.06)', border: '1px solid rgba(255,68,68,0.2)', borderRadius: 14, padding: 24 }}>
           <div style={{ fontSize: '0.72rem', color: 'var(--danger)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Outstanding Balance</div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: '2rem', color: 'var(--danger)' }}>{totalUnpaid.toLocaleString()} <span style={{ fontSize: '0.9rem' }}>EGP</span></div>
+        </div>
+        <div style={{ background: 'rgba(156,39,176,0.06)', border: '1px solid rgba(156,39,176,0.2)', borderRadius: 14, padding: 24 }}>
+          <div style={{ fontSize: '0.72rem', color: '#ce93d8', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Refunded</div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: '2rem', color: '#ce93d8' }}>{totalRefunded.toLocaleString()} <span style={{ fontSize: '0.9rem' }}>EGP</span></div>
         </div>
         <div style={{ background: 'rgba(0,212,245,0.06)', border: '1px solid rgba(0,212,245,0.2)', borderRadius: 14, padding: 24 }}>
           <div style={{ fontSize: '0.72rem', color: 'var(--nova-cyan)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Total Invoices</div>
@@ -344,15 +353,35 @@ export function PatientRecords() {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
+  const [images, setImages] = useState({});
+  const [lightbox, setLightbox] = useState(null);
 
   useEffect(() => {
     patientAPI.records().then(r => setRecords(r.data)).finally(() => setLoading(false));
   }, []);
 
+  const toggleRecord = async (r) => {
+    if (selected?.record_id === r.record_id) { setSelected(null); return; }
+    setSelected(r);
+    if (r.order_id && !images[r.order_id]) {
+      try {
+        const res = await patientAPI.getImages(r.order_id);
+        setImages(prev => ({ ...prev, [r.order_id]: res.data }));
+      } catch { /* no images */ }
+    }
+  };
+
   if (loading) return <DashboardLayout title="Medical Records"><Spinner /></DashboardLayout>;
 
   return (
     <DashboardLayout title="Medical Records">
+      {lightbox && (
+        <div onClick={() => setLightbox(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <img src={lightbox} alt="scan" style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 10, objectFit: 'contain' }} />
+          <button onClick={() => setLightbox(null)} style={{ position: 'absolute', top: 20, right: 28, background: 'none', border: 'none', color: '#fff', fontSize: '1.8rem', cursor: 'pointer' }}>✕</button>
+        </div>
+      )}
+
       {records.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '80px 40px', color: 'var(--text-muted)' }}>
           <div style={{ fontSize: '3rem', marginBottom: 16, opacity: 0.4 }}>▤</div>
@@ -361,37 +390,83 @@ export function PatientRecords() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {records.map((r) => (
-            <div key={r.record_id} style={{
-              background: 'linear-gradient(135deg, rgba(10,34,64,0.7), rgba(2,14,31,0.8))',
-              border: '1px solid var(--border)', borderRadius: 16, padding: 24,
-              cursor: 'pointer', transition: 'border-color 0.2s',
-            }}
-              onClick={() => setSelected(selected?.record_id === r.record_id ? null : r)}
-              onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(0,212,245,0.3)'}
-              onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: selected?.record_id === r.record_id ? 20 : 0 }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem' }}>{r.record_type}</span>
-                    <Badge status={r.signed ? 'completed' : 'pending'} />
+          {records.map((r) => {
+            const isOpen = selected?.record_id === r.record_id;
+            const recordImages = images[r.order_id] || [];
+            return (
+              <div key={r.record_id} style={{
+                background: 'linear-gradient(135deg, rgba(10,34,64,0.7), rgba(2,14,31,0.8))',
+                border: `1px solid ${isOpen ? 'rgba(0,212,245,0.3)' : 'var(--border)'}`, borderRadius: 16, padding: 24,
+                cursor: 'pointer', transition: 'border-color 0.2s',
+              }}
+                onClick={() => toggleRecord(r)}
+                onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(0,212,245,0.3)'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = isOpen ? 'rgba(0,212,245,0.3)' : 'var(--border)'}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: isOpen ? 20 : 0 }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem' }}>{r.record_type}</span>
+                      <Badge status={r.signed ? 'completed' : 'pending'} />
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                      {r.date_created} · {r.staff_name || 'Unknown Staff'}
+                    </div>
                   </div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 4 }}>
-                    {r.date_created} · {r.staff_name || 'Unknown Staff'}
-                  </div>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '1rem', transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'none' }}>▾</span>
                 </div>
-                <span style={{ color: 'var(--text-muted)', fontSize: '1rem', transition: 'transform 0.2s', transform: selected?.record_id === r.record_id ? 'rotate(180deg)' : 'none' }}>▾</span>
+
+                {isOpen && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {r.findings_and_impression && (
+                      <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 20, borderLeft: '3px solid var(--nova-cyan)' }}>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--nova-cyan)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>Radiologist Findings & Impression</div>
+                        <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.7, margin: 0 }}>{r.findings_and_impression}</p>
+                        {r.report_date && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 12 }}>Report date: {r.report_date}</div>}
+                      </div>
+                    )}
+
+                    {recordImages.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--nova-cyan)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>
+                          Imaging Scans ({recordImages.length})
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
+                          {recordImages.map(img => (
+                            <div
+                              key={img.file_id}
+                              onClick={e => { e.stopPropagation(); setLightbox(img.url); }}
+                              style={{ cursor: 'pointer', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)', aspectRatio: '1', background: '#000', position: 'relative' }}
+                              onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(0,212,245,0.5)'}
+                              onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+                            >
+                              <img
+                                src={img.url}
+                                alt="scan"
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                onError={e => {
+                                  e.currentTarget.style.display = 'none';
+                                  e.currentTarget.nextSibling.style.display = 'flex';
+                                }}
+                              />
+                              <div style={{ display: 'none', position: 'absolute', inset: 0, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(10,34,64,0.9)', color: 'var(--text-muted)', fontSize: '0.7rem', textAlign: 'center', padding: 8, gap: 6 }}>
+                                <span style={{ fontSize: '1.4rem', opacity: 0.4 }}>⚠</span>
+                                <span>Re-upload<br/>required</span>
+                              </div>
+                              <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.6)', padding: '4px 8px', fontSize: '0.65rem', color: 'rgba(255,255,255,0.7)' }}>
+                                {img.file_type?.toUpperCase()}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 8 }}>Click any image to view full size</div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              {selected?.record_id === r.record_id && r.findings_and_impression && (
-                <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 20, borderLeft: '3px solid var(--nova-cyan)' }}>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--nova-cyan)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>Radiologist Findings & Impression</div>
-                  <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>{r.findings_and_impression}</p>
-                  {r.report_date && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 12 }}>Report date: {r.report_date}</div>}
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </DashboardLayout>

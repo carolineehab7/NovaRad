@@ -3,10 +3,17 @@ import { Link } from 'react-router-dom';
 import DashboardLayout from '../../components/DashboardLayout';
 import { StatCard, Card, DataTable, Badge, Button, Spinner, Chatbot } from '../../components/UI';
 import { patientAPI } from '../../api/client';
+import { PaymentModal } from './PatientPages';
 
 export default function PatientDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [payingInvoice, setPayingInvoice] = useState(null);
+
+  const reload = async () => {
+    const r = await patientAPI.dashboard();
+    setData(r.data);
+  };
 
   useEffect(() => {
     patientAPI.dashboard()
@@ -17,15 +24,12 @@ export default function PatientDashboard() {
 
   const cancelAppt = async (id) => {
     if (!window.confirm('Cancel this appointment?')) return;
-    await patientAPI.cancelAppointment(id);
-    const r = await patientAPI.dashboard();
-    setData(r.data);
-  };
-
-  const payInvoice = async (id) => {
-    await patientAPI.payInvoice(id);
-    const r = await patientAPI.dashboard();
-    setData(r.data);
+    try {
+      await patientAPI.cancelAppointment(id);
+      reload();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to cancel appointment.');
+    }
   };
 
   if (loading) return <DashboardLayout title="Dashboard"><Spinner /></DashboardLayout>;
@@ -34,6 +38,13 @@ export default function PatientDashboard() {
 
   return (
     <DashboardLayout title="Patient Dashboard">
+      {payingInvoice && (
+        <PaymentModal
+          invoice={payingInvoice}
+          onSuccess={() => { setPayingInvoice(null); reload(); }}
+          onClose={() => setPayingInvoice(null)}
+        />
+      )}
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20, marginBottom: 32 }}>
         <StatCard value={data?.appointments?.length || 0} label="Appointments" icon="◷" delay={0} />
@@ -78,7 +89,7 @@ export default function PatientDashboard() {
             data={data?.invoices || []}
             emptyMsg="No invoices"
             actions={(row) => row.status === 'unpaid' ? (
-              <Button size="sm" variant="success" onClick={() => payInvoice(row.invoice_id)}>Pay</Button>
+              <Button size="sm" variant="success" onClick={() => setPayingInvoice(row)}>Pay</Button>
             ) : null}
           />
         </Card>
