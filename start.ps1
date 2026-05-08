@@ -1,4 +1,4 @@
-# NovaRad — start everything with one command
+# NovaRad - start everything with one command
 # Usage: .\start.ps1
 
 # Load .env into current process environment
@@ -14,9 +14,9 @@ if (Test-Path .\.env) {
 }
 
 # Verify the API key is set
-$apiKey = [System.Environment]::GetEnvironmentVariable('ANTHROPIC_API_KEY', 'Process')
+$apiKey = [System.Environment]::GetEnvironmentVariable('GEMINI_API_KEY', 'Process')
 if (-not $apiKey -or $apiKey -eq 'your_api_key_here') {
-    Write-Host "[WARNING] ANTHROPIC_API_KEY not set — chatbot will use basic keyword mode." -ForegroundColor Yellow
+    Write-Host "[WARNING] GEMINI_API_KEY not set - chatbot will use basic keyword mode." -ForegroundColor Yellow
     Write-Host "  Edit .env and add your key, then restart." -ForegroundColor DarkGray
     Write-Host ""
 }
