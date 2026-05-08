@@ -43,12 +43,14 @@ def ensure_imaging_file_table():
             filename VARCHAR(255) NOT NULL,
             original_name VARCHAR(255),
             file_type VARCHAR(10),
-            file_data BYTEA,
             uploaded_at TIMESTAMP DEFAULT NOW()
         )
     ''')
+    conn.commit()
+    # Add file_data column separately so it always runs even if table pre-existed
     cursor.execute('ALTER TABLE imaging_file ADD COLUMN IF NOT EXISTS file_data BYTEA')
-    conn.commit(); cursor.close(); conn.close()
+    conn.commit()
+    cursor.close(); conn.close()
 
 try:
     ensure_imaging_file_table()
@@ -485,6 +487,18 @@ def api_radiology_report(order_id):
         conn.rollback(); cursor.close(); conn.close()
         return jsonify({'error': str(e)}), 400
 
+@app.route('/api/staff/images/<int:file_id>', methods=['DELETE'])
+@role_required('receptionist', 'technician', 'radiologist', 'admin')
+def api_delete_image(file_id):
+    conn = get_db(); cursor = conn.cursor()
+    try:
+        cursor.execute('DELETE FROM imaging_file WHERE file_id=%s', (file_id,))
+        conn.commit(); cursor.close(); conn.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        conn.rollback(); cursor.close(); conn.close()
+        return jsonify({'error': str(e)}), 400
+
 @app.route('/api/staff/machines')
 @role_required('radiologist', 'technician', 'receptionist', 'admin')
 def api_get_machines():
@@ -636,19 +650,23 @@ def api_upload_image(order_id):
         file_bytes = f.read()
 
     conn = get_db(); cursor = conn.cursor()
-    cursor.execute(
-        'INSERT INTO imaging_file (order_id, filename, original_name, file_type, file_data) VALUES (%s,%s,%s,%s,%s) RETURNING file_id',
-        (order_id, stored_name, f.filename, stored_ext, psycopg2.Binary(file_bytes))
-    )
-    file_id = cursor.fetchone()[0]
-    conn.commit(); cursor.close(); conn.close()
-    return jsonify({'ok': True, 'file_id': file_id, 'filename': stored_name, 'url': f'/api/uploads/{stored_name}'})
+    try:
+        cursor.execute(
+            'INSERT INTO imaging_file (order_id, filename, original_name, file_type, file_data) VALUES (%s,%s,%s,%s,%s) RETURNING file_id',
+            (order_id, stored_name, f.filename, stored_ext, psycopg2.Binary(file_bytes))
+        )
+        file_id = cursor.fetchone()[0]
+        conn.commit(); cursor.close(); conn.close()
+        return jsonify({'ok': True, 'file_id': file_id, 'filename': stored_name, 'url': f'/api/uploads/{stored_name}'})
+    except Exception as e:
+        conn.rollback(); cursor.close(); conn.close()
+        return jsonify({'error': str(e)}), 400
 
 @app.route('/api/staff/images/<int:order_id>')
 @login_required
 def api_get_images(order_id):
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cursor.execute('SELECT * FROM imaging_file WHERE order_id=%s ORDER BY uploaded_at', (order_id,))
+    cursor.execute('SELECT file_id, order_id, filename, original_name, file_type, uploaded_at FROM imaging_file WHERE order_id=%s ORDER BY uploaded_at', (order_id,))
     rows = rows_to_list(cursor.fetchall())
     cursor.close(); conn.close()
     for row in rows:

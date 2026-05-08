@@ -118,7 +118,7 @@ export function ImagingOrders() {
   const [uploadingId, setUploadingId] = useState(null);
   const [uploadMsg, setUploadMsg] = useState('');
   const fileInputRef = React.useRef(null);
-  const [pendingOrderId, setPendingOrderId] = useState(null);
+  const pendingOrderRef = React.useRef(null);
 
   const load = () => staffAPI.imagingOrders().then(r => setOrders(r.data)).finally(() => setLoading(false));
   useEffect(() => { load(); }, []);
@@ -129,24 +129,25 @@ export function ImagingOrders() {
   };
 
   const triggerUpload = (orderId) => {
-    setPendingOrderId(orderId);
+    pendingOrderRef.current = orderId;
     fileInputRef.current.value = '';
     fileInputRef.current.click();
   };
 
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
-    if (!file || !pendingOrderId) return;
-    setUploadingId(pendingOrderId);
+    const orderId = pendingOrderRef.current;
+    if (!file || !orderId) return;
+    setUploadingId(orderId);
     setUploadMsg('');
     try {
-      await staffAPI.uploadImage(pendingOrderId, file);
-      setUploadMsg(`Image uploaded successfully for order #${pendingOrderId}`);
+      await staffAPI.uploadImage(orderId, file);
+      setUploadMsg(`Image uploaded successfully for order #${orderId}`);
     } catch (err) {
       setUploadMsg(err.response?.data?.error || 'Upload failed.');
     } finally {
       setUploadingId(null);
-      setPendingOrderId(null);
+      pendingOrderRef.current = null;
     }
   };
 
@@ -234,6 +235,12 @@ export function RadiologyReport() {
   const [uploading, setUploading] = useState(false);
 
   const loadImages = () => staffAPI.getImages(orderId).then(r => setImages(r.data)).catch(() => {});
+
+  const deleteImage = async (fileId) => {
+    if (!window.confirm('Delete this image?')) return;
+    await staffAPI.deleteImage(fileId);
+    loadImages();
+  };
 
   useEffect(() => {
     staffAPI.getReport(orderId).then(r => {
@@ -339,14 +346,28 @@ export function RadiologyReport() {
                   {images.map(img => (
                     <div
                       key={img.file_id}
-                      onClick={() => setLightbox(img.url)}
-                      style={{ cursor: 'pointer', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)', aspectRatio: '1', background: '#000' }}
+                      style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)', aspectRatio: '1', background: '#000' }}
+                      onMouseEnter={e => e.currentTarget.querySelector('.del-btn').style.opacity = '1'}
+                      onMouseLeave={e => e.currentTarget.querySelector('.del-btn').style.opacity = '0'}
                     >
                       <img
                         src={img.url}
                         alt={img.original_name}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        onClick={() => setLightbox(img.url)}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
                       />
+                      <button
+                        className="del-btn"
+                        onClick={() => deleteImage(img.file_id)}
+                        style={{
+                          position: 'absolute', top: 4, right: 4,
+                          width: 22, height: 22, borderRadius: '50%',
+                          background: 'rgba(255,68,68,0.85)', border: 'none',
+                          color: '#fff', fontSize: '0.7rem', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          opacity: 0, transition: 'opacity 0.15s', fontWeight: 700,
+                        }}
+                      >✕</button>
                     </div>
                   ))}
                 </div>
