@@ -15,7 +15,7 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "dev": "concurrently --names \"React,Flask\" --prefix-colors \"cyan,yellow\" \"react-scripts start\" \"venv\\\\Scripts\\\\python.exe app.py\""
+    "dev": "concurrently --names \"React,Flask\" --prefix-colors \"cyan,yellow\" \"react-scripts start\" \"python app.py\""
   },
   "proxy": "http://localhost:5000",
   "browserslist": {

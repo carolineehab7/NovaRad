@@ -182,17 +182,6 @@ python -m venv venv
 pip install -r requirements.txt
 ```
 
-#### Configure Environment Variables
-
-Create a `.env` file in the root directory:
-
-```env
-DATABASE_URL=postgresql://username:password@localhost:5432/novarad
-FLASK_ENV=development
-FLASK_APP=app.py
-SECRET_KEY=your-secret-key-here
-```
-
 #### Initialize Database
 
 ```bash

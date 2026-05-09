@@ -1,2 +1,7 @@
 Flask==3.0.3
+Flask-CORS==4.0.0
 psycopg2-binary==2.9.9
+pydicom[numpy]==2.4.4
+numpy
+Pillow
+gdcm

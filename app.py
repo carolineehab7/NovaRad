@@ -1,4 +1,5 @@
 from flask import Flask, session, request, jsonify, send_from_directory, Response
+from flask_cors import CORS
 import psycopg2
 import psycopg2.extras
 import re
@@ -41,6 +42,9 @@ def is_valid_booking_slot(dt):
 REACT_BUILD = os.path.join(os.path.dirname(__file__), 'build')
 app = Flask(__name__, static_folder=REACT_BUILD, static_url_path='/')
 app.secret_key = 'novarad_secret_2026'
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = False
+CORS(app, supports_credentials=True, origins=['http://localhost:3000', 'http://localhost:3000/', 'http://192.168.1.3:3000', 'http://192.168.1.3:3000/'])
 
 def get_db():
     conn = psycopg2.connect(dbname=PGDATABASE, user=PGUSER, password=PGPASSWORD, host=PGHOST, port=5432)
