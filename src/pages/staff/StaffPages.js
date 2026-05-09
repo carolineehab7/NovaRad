@@ -309,6 +309,7 @@ export function ImagingOrders() {
     pending: orders.filter((o) => o.order_status === "pending").length,
     in_progress: orders.filter((o) => o.order_status === "in_progress").length,
     completed: orders.filter((o) => o.order_status === "completed").length,
+    cancelled: orders.filter((o) => o.order_status === "cancelled").length,
   };
 
   return (
@@ -347,6 +348,7 @@ export function ImagingOrders() {
           { key: "pending", label: "Pending", color: "#ffb300" },
           { key: "in_progress", label: "In Progress", color: "#64b5f6" },
           { key: "completed", label: "Completed", color: "#00e676" },
+          { key: "cancelled", label: "Cancelled", color: "#ff4444" },
         ].map((filter) => (
           <button
             key={filter.key}
@@ -425,39 +427,55 @@ export function ImagingOrders() {
           ]}
           data={filteredOrders}
           emptyMsg="No imaging orders"
-          actions={(row) => (
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <select
-                value={row.order_status}
-                onChange={(e) => updateOrder(row.order_id, e.target.value)}
+          actions={(row) =>
+            row.order_status === "cancelled" ? (
+              <span
                 style={{
-                  background: "rgba(0,0,0,0.4)",
-                  border: "1px solid var(--border)",
-                  color: "var(--text-primary)",
-                  borderRadius: 8,
-                  padding: "6px 10px",
+                  color: "#ff4444",
                   fontSize: "0.8rem",
-                  fontFamily: "var(--font-body)",
+                  fontWeight: 600,
+                  padding: "6px 10px",
+                  borderRadius: 8,
+                  background: "rgba(255,68,68,0.08)",
+                  border: "1px solid rgba(255,68,68,0.25)",
                 }}
               >
-                {["pending", "in_progress", "completed"].map((s) => (
-                  <option key={s} value={s} style={{ background: "#061628" }}>
-                    {s
-                      .replace("_", " ")
-                      .replace(/\b\w/g, (c) => c.toUpperCase())}
-                  </option>
-                ))}
-              </select>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => triggerUpload(row.order_id)}
-                disabled={uploadingId === row.order_id}
-              >
-                {uploadingId === row.order_id ? "..." : "⬆ Image"}
-              </Button>
-            </div>
-          )}
+                Cancelled
+              </span>
+            ) : (
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <select
+                  value={row.order_status}
+                  onChange={(e) => updateOrder(row.order_id, e.target.value)}
+                  style={{
+                    background: "rgba(0,0,0,0.4)",
+                    border: "1px solid var(--border)",
+                    color: "var(--text-primary)",
+                    borderRadius: 8,
+                    padding: "6px 10px",
+                    fontSize: "0.8rem",
+                    fontFamily: "var(--font-body)",
+                  }}
+                >
+                  {["pending", "in_progress", "completed"].map((s) => (
+                    <option key={s} value={s} style={{ background: "#061628" }}>
+                      {s
+                        .replace("_", " ")
+                        .replace(/\b\w/g, (c) => c.toUpperCase())}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => triggerUpload(row.order_id)}
+                  disabled={uploadingId === row.order_id}
+                >
+                  {uploadingId === row.order_id ? "..." : "⬆ Image"}
+                </Button>
+              </div>
+            )
+          }
         />
       </Card>
     </DashboardLayout>

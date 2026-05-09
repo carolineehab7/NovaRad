@@ -7,7 +7,7 @@ import os
 import uuid
 from datetime import datetime, timedelta
 from functools import wraps
-
+# Load environment variables from .env file
 _env_path = os.path.join(os.path.dirname(__file__), '.env')
 if os.path.exists(_env_path):
     with open(_env_path) as _f:
@@ -21,7 +21,7 @@ PGHOST = 'ep-plain-cloud-ap59nxzp-pooler.c-7.us-east-1.aws.neon.tech'
 PGDATABASE = 'neondb'
 PGUSER = 'neondb_owner'
 PGPASSWORD = 'npg_86RoUyOKwgkF'
-
+# environment variables or a secure vault to store database credentials instead of hardcoding them.
 ALLOWED_IMAGE_EXTS = {'dcm', 'jpg', 'jpeg', 'png'}
 BOOKING_START_HOUR = 9
 BOOKING_END_HOUR = 22  # Exclusive; last slot starts at 21:00
@@ -45,13 +45,14 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = False
 CORS(app, supports_credentials=True, origins=['http://localhost:3000', 'http://localhost:3000/', 'http://192.168.1.3:3000', 'http://192.168.1.3:3000/'])
 
-# ─── [Mohamed Mostafa] PostgreSQL Schema & DB Admin ─────────────
-
+# ─── PostgreSQL Schema & DB Admin ─────────────
+# This section ensures that the necessary tables and columns exist, and performs any required migrations.
 def get_db():
     conn = psycopg2.connect(dbname=PGDATABASE, user=PGUSER, password=PGPASSWORD, host=PGHOST, port=5432)
     conn.autocommit = False
     return conn
-
+# Create imaging_file table if it doesn't exist
+# separate step to add the file_data column to avoid issues if the table already existed without it.
 def ensure_imaging_file_table():
     conn = get_db(); cursor = conn.cursor()
     cursor.execute('''
@@ -75,10 +76,11 @@ try:
 except Exception as _e:
     print(f'imaging_file table note: {_e}')
 
+# This function ensures that the invoice.status CHECK constraint includes 'refunded' and 'cancelled' to allow those statuses without causing any errors due to the constraint.
 def ensure_invoice_refunded_status():
-    """Drop any CHECK constraint on invoice.status that doesn't include 'refunded'/'cancelled', then recreate it."""
     conn = get_db(); cursor = conn.cursor()
     try:
+        # Find and drop existing CHECK constraint on invoice.status if it exists
         cursor.execute("""
             SELECT tc.constraint_name
             FROM information_schema.table_constraints tc
@@ -87,6 +89,7 @@ def ensure_invoice_refunded_status():
               AND tc.constraint_type = 'CHECK'
               AND cc.check_clause LIKE '%status%'
         """)
+        # so if there is an existing CHECK constraint on the status column, we need to drop it before adding the new one that includes 'refunded' and 'cancelled'.
         for (cname,) in cursor.fetchall():
             cursor.execute(f'ALTER TABLE invoice DROP CONSTRAINT "{cname}"')
         cursor.execute("""
@@ -105,6 +108,7 @@ try:
 except Exception as _e:
     print(f'Invoice status migration outer note: {_e}')
 
+# This function ensures that the machine table exists  with some seeds if it was empty.
 def ensure_machine_table():
     conn = get_db(); cursor = conn.cursor()
     try:
@@ -144,6 +148,8 @@ try:
 except Exception as _e:
     print(f'Machine table outer note: {_e}')
 
+# This function ensures that the appointment table has a radiologist_id column that references staff(staff_id)
+# that allows linking appointments to radiologists without causing errors if the column already exists.
 def ensure_appointment_radiologist_col():
     conn = get_db(); cursor = conn.cursor()
     try:
@@ -533,6 +539,7 @@ def api_cancel_appointment(appointment_id):
             return jsonify({'error': 'Appointment not found or already cancelled'}), 404
         cursor.execute("UPDATE invoice SET status='refunded' WHERE appointment_id=%s AND status='paid'", (appointment_id,))
         cursor.execute("UPDATE invoice SET status='cancelled' WHERE appointment_id=%s AND status='unpaid'", (appointment_id,))
+        cursor.execute("UPDATE imaging_order SET order_status='cancelled' WHERE appointment_id=%s", (appointment_id,))
         conn.commit(); cursor.close(); conn.close()
         return jsonify({'ok': True})
     except Exception as e:
