@@ -13,14 +13,6 @@ if (Test-Path .\.env) {
     Write-Host ""
 }
 
-# Verify the API key is set
-$apiKey = [System.Environment]::GetEnvironmentVariable('GEMINI_API_KEY', 'Process')
-if (-not $apiKey -or $apiKey -eq 'your_api_key_here') {
-    Write-Host "[WARNING] GEMINI_API_KEY not set - chatbot will use basic keyword mode." -ForegroundColor Yellow
-    Write-Host "  Edit .env and add your key, then restart." -ForegroundColor DarkGray
-    Write-Host ""
-}
-
 Write-Host "Starting NovaRad..." -ForegroundColor Cyan
 Write-Host "  React  -> http://localhost:3000" -ForegroundColor Cyan
 Write-Host "  Flask  -> http://localhost:5000" -ForegroundColor Yellow
