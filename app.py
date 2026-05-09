@@ -442,8 +442,8 @@ def api_book_appointment():
         cursor.execute("SELECT staff_id FROM staff WHERE role IN ('technician','receptionist') LIMIT 1")
         result = cursor.fetchone()
         if result:
-            staff_id = result['staff_id']
-
+            staff_id = result['staff_id']     
+    # if still not found, assign any staff
     radiologist_id = None
     selected_radiologist_id = request_data.get('radiologist_id')
     if selected_radiologist_id:
