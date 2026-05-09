@@ -234,7 +234,7 @@ def row_to_dict(row):
 def rows_to_list(rows):
     return [row_to_dict(r) for r in rows]
 
-# Serve the React app
+# Serve the React app and routing
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve_react(path):
@@ -327,15 +327,15 @@ def api_register():
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('SELECT user_id FROM "user" WHERE email=%s', (email,))
-    if cursor.fetchone():
+    if cursor.fetchone(): #checks if the email is already registered in the database
         cursor.close(); conn.close()
         return jsonify({'error': 'Email already registered'}), 400
-    try:
+    try: #add the user info to the database in user and patient tables
         cursor.execute('INSERT INTO "user" (username, password, email, role) VALUES (%s,%s,%s,%s) RETURNING user_id', (username, password, email, 'patient'))
         user_id = cursor.fetchone()[0]
         cursor.execute('INSERT INTO patient (user_id, p_full_name, dob, gender, phone, address, blood_type, medical_history, ssn) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)',
                     (user_id, full_name, dob, gender, phone, address, blood_type, medical_history, SSN))
-        conn.commit()
+        conn.commit() 
         cursor.close(); conn.close()
         return jsonify({'ok': True})
     except Exception as e:
@@ -378,7 +378,7 @@ def api_patient_profile():
         cursor.execute('UPDATE patient SET phone=%s, address=%s, blood_type=%s, medical_history=%s WHERE patient_id=%s',
                     (request_data.get('phone'), request_data.get('address'), request_data.get('blood_type'), request_data.get('medical_history'), patient_id))
         conn.commit()
-    cursor.execute('SELECT * FROM patient WHERE patient_id=%s', (patient_id,))
+    cursor.execute('SELECT * FROM patient WHERE patient_id=%s', (patient_id,)) #return patient info to be displayed in the profile 
     patient = row_to_dict(cursor.fetchone())
     cursor.close(); conn.close()
     return jsonify(patient)
@@ -417,8 +417,8 @@ def api_patient_referring_doctors():
 @app.route('/api/patient/available-slots')
 @role_required('patient')
 def api_patient_available_slots():
-    date_str = (request.args.get('date') or '').strip()
-    if not date_str:
+    date_str = (request.args.get('date') or '').strip() 
+    if not date_str: #if date is empty return error
         return jsonify({'error': 'date is required (YYYY-MM-DD)'}), 400
     try:
         selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
@@ -438,13 +438,13 @@ def api_patient_available_slots():
     cursor.close(); conn.close()
     # Filter out taken and past slots
     available = []
-    for s in all_slots:
-        slot_dt = datetime.fromisoformat(f'{selected_date.isoformat()}T{s}:00')
-        if s in taken:
+    for slot in all_slots:
+        slot_dt = datetime.fromisoformat(f'{selected_date.isoformat()}T{slot}:00')
+        if slot in taken:
             continue
         if slot_dt <= now:
             continue
-        available.append(s)
+        available.append(slot)
 
     return jsonify({'date': selected_date.isoformat(), 'slots': available})
 
@@ -454,7 +454,7 @@ def api_patient_available_slots():
 def api_book_appointment():
     patient_id = session['patient_id']
     request_data = request.get_json()
-    modality = request_data.get('modality', '')
+    modality = request_data.get('modality', '') #gets modality
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
     dept_keyword = {
@@ -562,6 +562,8 @@ def api_book_appointment():
 def api_cancel_appointment(appointment_id):
     patient_id = session['patient_id']
     conn = get_db(); cursor = conn.cursor()
+    # when cancelling an appointment, update status to cancelled in (appointment, invoice, imaging_order) 
+    # if there is a paid invoice, change it to refunded
     try:
         cursor.execute('UPDATE appointment SET status=%s WHERE appointment_id=%s AND patient_id=%s', ('cancelled', appointment_id, patient_id))
         if cursor.rowcount == 0:

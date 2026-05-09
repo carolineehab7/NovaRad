@@ -346,20 +346,18 @@ export function UltrasoundPage() {
 
 /* ─── Founders Page ─────────────────────────────────────────────── */
 const TEAM = [
-  { name: "Caroline Ehab", id: "4230163", role: "Backend Engineer", icon: "◎" },
+  { name: "Caroline El-baiady", id: "4230163", role: "Backend Engineer" },
   {
     name: "Mohamed Mostafa",
     id: "4230197",
     role: "Backend Engineer",
-    icon: "◈",
   },
-  { name: "Khadija Ali", id: "4230337", role: "Frontend Engineer", icon: "⬡" },
-  { name: "Reem Khaled", id: "4230145", role: "Frontend Engineer", icon: "◷" },
+  { name: "Khadija Ali", id: "4230337", role: "Frontend Engineer" },
+  { name: "Reem Khaled", id: "4230145", role: "Frontend Engineer" },
   {
     name: "Omar Walid Mohamed",
     id: "1210269",
-    role: "Frontend Engineer",
-    icon: "◑",
+    role: "Frontend Engineer"
   },
 ];
 
@@ -478,7 +476,7 @@ export function FoundersPage() {
             <div
               key={i}
               style={{
-                width: 180,
+                width: 200,
                 background:
                   "linear-gradient(135deg, rgba(10,34,64,0.8), rgba(2,14,31,0.9))",
                 border: "1px solid var(--border)",
@@ -496,23 +494,6 @@ export function FoundersPage() {
                 e.currentTarget.style.transform = "none";
               }}
             >
-              <div
-                style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: "50%",
-                  margin: "0 auto 16px",
-                  background:
-                    "linear-gradient(135deg, var(--nova-blue), var(--nova-cyan))",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "1.4rem",
-                  boxShadow: "0 0 20px rgba(0,212,245,0.25)",
-                }}
-              >
-                {member.icon}
-              </div>
               <div
                 style={{
                   fontFamily: "var(--font-display)",

@@ -27,7 +27,7 @@ export function StatCard({
           top: 16,
           right: 20,
           fontSize: "1.8rem",
-          opacity: 0.15,
+          opacity: 1.25,
           width: 40,
           height: 40,
           display: "flex",
@@ -43,7 +43,7 @@ export function StatCard({
               width: "100%",
               height: "100%",
               objectFit: "contain",
-              opacity: 0.15,
+              opacity: 1.25,
             }}
           />
         ) : (
