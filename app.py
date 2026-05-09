@@ -225,16 +225,22 @@ def api_login():
     session['role'] = user['role']
     session['email'] = user['email']
     role = user['role']
+    full_name = user['username']
     if role == 'patient':
-        cursor.execute('SELECT patient_id FROM patient WHERE user_id=%s', (user['user_id'],))
+        cursor.execute('SELECT patient_id, p_full_name FROM patient WHERE user_id=%s', (user['user_id'],))
         patient = cursor.fetchone()
-        if patient: session['patient_id'] = patient['patient_id']
+        if patient:
+            session['patient_id'] = patient['patient_id']
+            full_name = patient['p_full_name'] or full_name
     else:
-        cursor.execute('SELECT staff_id FROM staff WHERE user_id=%s', (user['user_id'],))
+        cursor.execute('SELECT staff_id, s_full_name FROM staff WHERE user_id=%s', (user['user_id'],))
         staff = cursor.fetchone()
-        if staff: session['staff_id'] = staff['staff_id']
+        if staff:
+            session['staff_id'] = staff['staff_id']
+            full_name = staff['s_full_name'] or full_name
+    session['full_name'] = full_name
     cursor.close(); conn.close()
-    return jsonify({'user_id': session['user_id'], 'username': session['username'], 'role': role, 'email': session['email']})
+    return jsonify({'user_id': session['user_id'], 'username': session['username'], 'role': role, 'email': session['email'], 'full_name': full_name})
 
 @app.route('/api/auth/logout', methods=['POST'])
 def api_logout():
@@ -245,7 +251,7 @@ def api_logout():
 def api_me():
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
-    return jsonify({'user_id': session['user_id'], 'username': session['username'], 'role': session['role'], 'email': session['email']})
+    return jsonify({'user_id': session['user_id'], 'username': session['username'], 'role': session['role'], 'email': session['email'], 'full_name': session.get('full_name', session['username'])})
 
 @app.route('/api/auth/register', methods=['POST'])
 def api_register():

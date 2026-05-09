@@ -539,18 +539,35 @@ export function Alert({ message, type = "error", onClose }) {
 }
 
 /* ─── Chatbot ─────────────────────────────────────────────────── */
+const INITIAL_MSG = {
+  role: "assistant",
+  content:
+    "Hi! I'm Nova, your NovaRad AI assistant. I can help you book appointments, check prices, understand billing, or navigate the portal. How can I help?",
+};
+
 export function Chatbot() {
-  const [open, setOpen] = useState(false);
-  const [msgs, setMsgs] = useState([
-    {
-      role: "assistant",
-      content:
-        "Hi! I'm Nova, your NovaRad AI assistant. I can help you book appointments, check prices, understand billing, or navigate the portal. How can I help?",
-    },
-  ]);
+  const [open, setOpen] = useState(
+    () => sessionStorage.getItem("chatbot_open") === "true"
+  );
+  const [msgs, setMsgs] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem("chatbot_msgs");
+      return saved ? JSON.parse(saved) : [INITIAL_MSG];
+    } catch {
+      return [INITIAL_MSG];
+    }
+  });
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const bottomRef = React.useRef(null);
+
+  React.useEffect(() => {
+    sessionStorage.setItem("chatbot_open", open);
+  }, [open]);
+
+  React.useEffect(() => {
+    sessionStorage.setItem("chatbot_msgs", JSON.stringify(msgs));
+  }, [msgs]);
 
   React.useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

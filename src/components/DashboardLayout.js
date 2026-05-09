@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { Chatbot } from "./UI";
 
 const patientLinks = [
   { path: "/patient/dashboard", icon: "/dashboard.png", label: "Dashboard" },
@@ -335,7 +336,7 @@ export default function DashboardLayout({ children, title }) {
                   marginTop: 2,
                 }}
               >
-                {user?.username}
+                {user?.full_name || user?.username}
               </div>
               <div
                 style={{
@@ -373,6 +374,8 @@ export default function DashboardLayout({ children, title }) {
         </div>
       </aside>
 
+      {user?.role === "patient" && <Chatbot />}
+
       {/* Main */}
       <div style={styles.main}>
         <div style={styles.topbar}>
@@ -396,7 +399,7 @@ export default function DashboardLayout({ children, title }) {
           </div>
           <div style={styles.userChip}>
             <div style={styles.avatar}>
-              {(user?.username || "U")[0].toUpperCase()}
+              {(user?.full_name || user?.username || "U")[0].toUpperCase()}
             </div>
             <div>
               <div
@@ -406,7 +409,7 @@ export default function DashboardLayout({ children, title }) {
                   color: "var(--text-primary)",
                 }}
               >
-                {user?.username}
+                {user?.full_name || user?.username}
               </div>
               <div
                 style={{

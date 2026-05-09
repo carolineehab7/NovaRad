@@ -8,7 +8,6 @@ import {
   Badge,
   Button,
   Spinner,
-  Chatbot,
 } from "../../components/UI";
 import { patientAPI } from "../../api/client";
 import { PaymentModal } from "./PatientPages";
@@ -306,7 +305,6 @@ export default function PatientDashboard() {
         />
       </Card>
 
-      <Chatbot />
     </DashboardLayout>
   );
 }
