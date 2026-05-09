@@ -108,6 +108,35 @@ try:
 except Exception as _e:
     print(f'Invoice status migration outer note: {_e}')
 
+def ensure_imaging_order_cancelled_status():
+    conn = get_db(); cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT tc.constraint_name
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.check_constraints cc ON tc.constraint_name = cc.constraint_name
+            WHERE tc.table_name = 'imaging_order'
+              AND tc.constraint_type = 'CHECK'
+              AND cc.check_clause LIKE '%order_status%'
+        """)
+        for (cname,) in cursor.fetchall():
+            cursor.execute(f'ALTER TABLE imaging_order DROP CONSTRAINT "{cname}"')
+        cursor.execute("""
+            ALTER TABLE imaging_order ADD CONSTRAINT imaging_order_status_check
+            CHECK (order_status IN ('pending', 'in_progress', 'completed', 'cancelled'))
+        """)
+        conn.commit()
+    except Exception as _e:
+        conn.rollback()
+        print(f'Imaging order status migration note: {_e}')
+    finally:
+        cursor.close(); conn.close()
+
+try:
+    ensure_imaging_order_cancelled_status()
+except Exception as _e:
+    print(f'Imaging order status migration outer note: {_e}')
+
 # This function ensures that the machine table exists  with some seeds if it was empty.
 def ensure_machine_table():
     conn = get_db(); cursor = conn.cursor()
@@ -611,7 +640,7 @@ def api_staff_dashboard():
         order_params = [staff_id]
     cursor.execute(f'''SELECT imaging_order.*, appointment.scheduled_datetime, appointment.modality, patient.p_full_name as patient_name
         FROM imaging_order JOIN appointment ON imaging_order.appointment_id=appointment.appointment_id
-        JOIN patient ON appointment.patient_id=patient.patient_id WHERE imaging_order.order_status != 'completed'{order_filter} ORDER BY appointment.scheduled_datetime ASC LIMIT 10''', order_params)
+        JOIN patient ON appointment.patient_id=patient.patient_id WHERE imaging_order.order_status NOT IN ('completed', 'cancelled'){order_filter} ORDER BY appointment.scheduled_datetime ASC LIMIT 10''', order_params)
     orders = rows_to_list(cursor.fetchall())
     cursor.close(); conn.close()
     return jsonify({'appointments': appointments, 'orders': orders})
