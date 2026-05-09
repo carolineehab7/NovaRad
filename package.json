@@ -15,7 +15,10 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "dev": "concurrently --names \"React,Flask\" --prefix-colors \"cyan,yellow\" \"react-scripts start\" \"python app.py\""
+    "predev": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$pidOn3000 = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -First 1; if (-not $pidOn3000) { Write-Host 'Port 3000 is free.'; exit 0 }; $proc = Get-Process -Id $pidOn3000 -ErrorAction SilentlyContinue; if ($proc -and $proc.ProcessName -eq 'node') { Stop-Process -Id $pidOn3000 -Force; Write-Host 'Stopped Node on port 3000.' } else { Write-Host 'Port 3000 is in use by a non-Node process. Leaving it untouched.' }\"",
+    "dev:react": "react-scripts start",
+    "dev:flask": "python app.py",
+    "dev": "concurrently -k --names \"React,Flask\" --prefix-colors \"cyan,yellow\" \"npm:dev:react\" \"npm:dev:flask\""
   },
   "proxy": "http://localhost:5000",
   "browserslist": {
