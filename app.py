@@ -45,6 +45,8 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = False
 CORS(app, supports_credentials=True, origins=['http://localhost:3000', 'http://localhost:3000/', 'http://192.168.1.3:3000', 'http://192.168.1.3:3000/'])
 
+# ─── [Mohamed Mostafa] PostgreSQL Schema & DB Admin ─────────────
+
 def get_db():
     conn = psycopg2.connect(dbname=PGDATABASE, user=PGUSER, password=PGPASSWORD, host=PGHOST, port=5432)
     conn.autocommit = False
@@ -157,6 +159,8 @@ try:
 except Exception as _e:
     print(f'Appointment radiologist col outer note: {_e}')
 
+# ─── [Caroline Ehab] User Authentication — Decorators ───────────
+
 def login_required(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -207,6 +211,7 @@ def serve_react(path):
     return jsonify({'error': 'React build not found. Run: npm run build in the frontend/ folder.'}), 404
 
 # ─── Auth API ────────────────────────────────────────────────────
+# [Caroline Ehab] Login, Logout, Me, Register
 
 @app.route('/api/auth/login', methods=['POST'])
 def api_login():
@@ -297,6 +302,7 @@ def api_register():
 
 # ─── Patient API ────────────────────────────────────────────────
 
+# [Mohamed Mostafa] Patient Dashboard
 @app.route('/api/patient/dashboard')
 @role_required('patient')
 def api_patient_dashboard():
@@ -318,6 +324,7 @@ def api_patient_dashboard():
     cursor.close(); conn.close()
     return jsonify({'patient': patient, 'appointments': appointments, 'invoices': invoices, 'records': records})
 
+# [Caroline Ehab] Patient Profile API
 @app.route('/api/patient/profile', methods=['GET', 'PUT'])
 @role_required('patient')
 def api_patient_profile():
@@ -333,6 +340,7 @@ def api_patient_profile():
     cursor.close(); conn.close()
     return jsonify(patient)
 
+# [Caroline Ehab] Appointment Management — List, Slots, Referring Doctors, Book, Cancel
 @app.route('/api/patient/appointments')
 @role_required('patient')
 def api_patient_appointments():
@@ -503,6 +511,7 @@ def api_cancel_appointment(appointment_id):
         conn.rollback(); cursor.close(); conn.close()
         return jsonify({'error': str(e)}), 400
 
+# [Mohamed Mostafa] Billing & Payments — Patient Billing + Pay Invoice
 @app.route('/api/patient/billing')
 @role_required('patient')
 def api_patient_billing():
@@ -523,6 +532,7 @@ def api_pay_invoice(invoice_id):
     conn.commit(); cursor.close(); conn.close()
     return jsonify({'ok': True})
 
+# [Caroline Ehab] Medical Records — Patient Records
 @app.route('/api/patient/records')
 @role_required('patient')
 def api_patient_records():
@@ -537,6 +547,7 @@ def api_patient_records():
 
 # ─── Staff API ──────────────────────────────────────────────────
 
+# [Mohamed Mostafa] Staff Dashboard
 @app.route('/api/staff/dashboard')
 @role_required('radiologist', 'technician', 'receptionist')
 def api_staff_dashboard():
@@ -551,6 +562,7 @@ def api_staff_dashboard():
     cursor.close(); conn.close()
     return jsonify({'appointments': appointments, 'orders': orders})
 
+# [Caroline Ehab] Appointment Management — Staff Appointments + Update Status
 @app.route('/api/staff/appointments')
 @role_required('radiologist', 'technician', 'receptionist')
 def api_staff_appointments():
@@ -575,6 +587,7 @@ def api_update_appointment(appointment_id):
     conn.commit(); cursor.close(); conn.close()
     return jsonify({'ok': True})
 
+# [Mohamed Mostafa] Imaging Orders & Radiology Reports — List Orders, Update Order, Report GET/POST
 @app.route('/api/staff/imaging-orders')
 @role_required('radiologist', 'technician', 'receptionist')
 def api_imaging_orders():
@@ -650,6 +663,7 @@ def api_delete_image(file_id):
         conn.rollback(); cursor.close(); conn.close()
         return jsonify({'error': str(e)}), 400
 
+# [Mohamed Mostafa] Imaging Orders & Radiology Reports — Machines
 @app.route('/api/staff/machines')
 @role_required('radiologist', 'technician', 'receptionist', 'admin')
 def api_get_machines():
@@ -678,6 +692,7 @@ def api_update_machine(machine_id):
 
 # ─── Admin API ──────────────────────────────────────────────────
 
+# [Mohamed Mostafa] Admin Dashboard
 @app.route('/api/admin/dashboard')
 @role_required('admin')
 def api_admin_dashboard():
@@ -699,6 +714,7 @@ def api_admin_dashboard():
     return jsonify({'total_patients': total_patients, 'total_staff': total_staff, 'pending_appts': pending_appts,
                     'unpaid_invoices': unpaid_invoices, 'total_revenue': int(total_revenue), 'recent_appts': recent_appts})
 
+# [Mohamed Mostafa] Admin Management — Staff CRUD + Patients List
 @app.route('/api/admin/staff', methods=['GET', 'POST'])
 @role_required('admin')
 def api_admin_staff():
@@ -741,6 +757,7 @@ def api_admin_patients():
     cursor.close(); conn.close()
     return jsonify(rows)
 
+# [Mohamed Mostafa] Billing & Payments — Admin Billing
 @app.route('/api/admin/billing')
 @role_required('admin')
 def api_admin_billing():
@@ -753,6 +770,7 @@ def api_admin_billing():
     cursor.close(); conn.close()
     return jsonify({'invoices': invoices, 'paid': int(paid), 'unpaid': int(unpaid)})
 
+# [Mohamed Mostafa] Imaging Orders & Radiology Reports — Admin Reports
 @app.route('/api/admin/reports')
 @role_required('admin')
 def api_admin_reports():
@@ -765,6 +783,7 @@ def api_admin_reports():
     cursor.close(); conn.close()
     return jsonify(rows)
 
+# [Caroline Ehab] Medical Records — Upload, Get, Delete Images, Serve
 @app.route('/api/staff/upload-image/<int:order_id>', methods=['POST'])
 @role_required('receptionist', 'technician', 'radiologist', 'admin')
 def api_upload_image(order_id):
