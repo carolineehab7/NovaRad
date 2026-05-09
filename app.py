@@ -108,6 +108,7 @@ try:
 except Exception as _e:
     print(f'Invoice status migration outer note: {_e}')
 
+# This function ensures that the imaging_order.order_status CHECK constraint includes 'cancelled' to allow that status without causing any errors due to the constraint.
 def ensure_imaging_order_cancelled_status():
     conn = get_db(); cursor = conn.cursor()
     try:
