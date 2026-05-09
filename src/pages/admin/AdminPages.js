@@ -17,11 +17,11 @@ export function AdminDashboard() {
   return (
     <DashboardLayout title="System Overview">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 20, marginBottom: 32 }}>
-        <StatCard value={data?.total_patients || 0} label="Total Patients" icon="/patients.png" delay={0} />
-        <StatCard value={data?.total_staff || 0} label="Staff Members" icon="/staff.png" color="#a78bfa" delay={1} />
-        <StatCard value={data?.pending_appts || 0} label="Scheduled Appointments" icon="/appointments.png" color="#fbbf24" delay={2} />
-        <StatCard value={data?.unpaid_invoices || 0} label="Unpaid Invoices" icon="/invoices.png" color="#ff4444" delay={3} />
-        <StatCard value={`${(data?.total_revenue || 0).toLocaleString()} EGP`} label="Revenue Collected" icon="/revenue.png" color="#00e676" delay={4} />
+        <StatCard value={data?.total_patients || 0} label="Total Patients" delay={0} />
+        <StatCard value={data?.total_staff || 0} label="Staff Members" color="#a78bfa" delay={1} />
+        <StatCard value={data?.pending_appts || 0} label="Scheduled Appointments"  color="#fbbf24" delay={2} />
+        <StatCard value={data?.unpaid_invoices || 0} label="Unpaid Invoices"  color="#ff4444" delay={3} />
+        <StatCard value={`${(data?.total_revenue || 0).toLocaleString()} EGP`} label="Revenue Collected" color="#00e676" delay={4} />
       </div>
 
       <Card title="Recent Appointments">
