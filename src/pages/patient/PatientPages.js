@@ -937,6 +937,9 @@ export function PatientBilling() {
   const totalRefunded = invoices
     .filter((i) => i.status === "refunded")
     .reduce((s, i) => s + (i.total_amount || 0), 0);
+  const totalCancelled = invoices
+    .filter((i) => i.status === "cancelled")
+    .reduce((s, i) => s + (i.total_amount || 0), 0);
   const sortedInvoices = [...invoices].sort((a, b) => {
     const aUnpaid = a.status === "unpaid";
     const bUnpaid = b.status === "unpaid";
@@ -969,7 +972,7 @@ export function PatientBilling() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
+          gridTemplateColumns: "repeat(5, 1fr)",
           gap: 20,
           marginBottom: 28,
         }}
@@ -1066,6 +1069,36 @@ export function PatientBilling() {
         </div>
         <div
           style={{
+            background: "rgba(96,125,139,0.08)",
+            border: "1px solid rgba(96,125,139,0.25)",
+            borderRadius: 14,
+            padding: 24,
+          }}
+        >
+          <div
+            style={{
+              fontSize: "0.72rem",
+              color: "#b0bec5",
+              textTransform: "uppercase",
+              letterSpacing: "0.1em",
+              marginBottom: 6,
+            }}
+          >
+            Cancelled
+          </div>
+          <div
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: "2rem",
+              color: "#b0bec5",
+            }}
+          >
+            {totalCancelled.toLocaleString()}{" "}
+            <span style={{ fontSize: "0.9rem" }}>EGP</span>
+          </div>
+        </div>
+        <div
+          style={{
             background: "rgba(0,212,245,0.06)",
             border: "1px solid rgba(0,212,245,0.2)",
             borderRadius: 14,
@@ -1135,6 +1168,14 @@ export function PatientBilling() {
               >
                 Pay Now
               </Button>
+            ) : row.status === "refunded" ? (
+              <span style={{ color: "#ce93d8", fontSize: "0.85rem" }}>
+                Refunded
+              </span>
+            ) : row.status === "cancelled" ? (
+              <span style={{ color: "#b0bec5", fontSize: "0.85rem" }}>
+                Cancelled
+              </span>
             ) : (
               <span style={{ color: "var(--success)", fontSize: "0.85rem" }}>
                 ✓ Paid

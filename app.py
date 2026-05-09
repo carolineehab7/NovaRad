@@ -76,7 +76,7 @@ except Exception as _e:
     print(f'imaging_file table note: {_e}')
 
 def ensure_invoice_refunded_status():
-    """Drop any CHECK constraint on invoice.status that doesn't include 'refunded', then recreate it."""
+    """Drop any CHECK constraint on invoice.status that doesn't include 'refunded'/'cancelled', then recreate it."""
     conn = get_db(); cursor = conn.cursor()
     try:
         cursor.execute("""
@@ -91,7 +91,7 @@ def ensure_invoice_refunded_status():
             cursor.execute(f'ALTER TABLE invoice DROP CONSTRAINT "{cname}"')
         cursor.execute("""
             ALTER TABLE invoice ADD CONSTRAINT invoice_status_check
-            CHECK (status IN ('unpaid', 'paid', 'refunded'))
+            CHECK (status IN ('unpaid', 'paid', 'refunded', 'cancelled'))
         """)
         conn.commit()
     except Exception as _e:
@@ -532,6 +532,7 @@ def api_cancel_appointment(appointment_id):
             conn.rollback(); cursor.close(); conn.close()
             return jsonify({'error': 'Appointment not found or already cancelled'}), 404
         cursor.execute("UPDATE invoice SET status='refunded' WHERE appointment_id=%s AND status='paid'", (appointment_id,))
+        cursor.execute("UPDATE invoice SET status='cancelled' WHERE appointment_id=%s AND status='unpaid'", (appointment_id,))
         conn.commit(); cursor.close(); conn.close()
         return jsonify({'ok': True})
     except Exception as e:
