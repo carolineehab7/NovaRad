@@ -8,7 +8,6 @@ import uuid
 from datetime import datetime, timedelta
 from functools import wraps
 
-# Load .env file if it exists (no external package needed)
 _env_path = os.path.join(os.path.dirname(__file__), '.env')
 if os.path.exists(_env_path):
     with open(_env_path) as _f:
