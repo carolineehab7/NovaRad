@@ -5,25 +5,45 @@ import { useAuth } from "../context/AuthContext";
 const patientLinks = [
   { path: "/patient/dashboard", icon: "/dashboard.png", label: "Dashboard" },
   { path: "/patient/profile", icon: "/account.png", label: "My Profile" },
-  { path: "/patient/appointments", icon: "/appointments.png", label: "Appointments" },
+  {
+    path: "/patient/appointments",
+    icon: "/appointments.png",
+    label: "Appointments",
+  },
   { path: "/patient/book", icon: "/bookapp.png", label: "Book Appointment" },
-  { path: "/patient/records", icon: "/medrecords.png", label: "Medical Records" },
+  {
+    path: "/patient/records",
+    icon: "/medrecords.png",
+    label: "Medical Records",
+  },
   { path: "/patient/billing", icon: "/bill.png", label: "Billing" },
 ];
 
 const staffLinks = {
   receptionist: [
     { path: "/staff/dashboard", icon: "/dashboard.png", label: "Dashboard" },
-    { path: "/staff/appointments", icon: "/appointments.png", label: "Appointments" },
+    {
+      path: "/staff/appointments",
+      icon: "/appointments.png",
+      label: "Appointments",
+    },
   ],
   technician: [
     { path: "/staff/dashboard", icon: "/dashboard.png", label: "Dashboard" },
-    { path: "/staff/imaging-orders", icon: "/imaging-orders.png", label: "Imaging Orders" },
+    {
+      path: "/staff/imaging-orders",
+      icon: "/imaging-orders.png",
+      label: "Imaging Orders",
+    },
     { path: "/staff/machines", icon: "/machines.png", label: "Machines" },
   ],
   radiologist: [
     { path: "/staff/dashboard", icon: "/dashboard.png", label: "Dashboard" },
-    { path: "/staff/imaging-orders", icon: "/imaging-orders.png", label: "Imaging Orders" },
+    {
+      path: "/staff/imaging-orders",
+      icon: "/imaging-orders.png",
+      label: "Imaging Orders",
+    },
   ],
 };
 
@@ -214,20 +234,26 @@ export default function DashboardLayout({ children, title }) {
                       fontSize: "1.1rem",
                       flexShrink: 0,
                       width: 20,
+                      height: 20,
                       textAlign: "center",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                     }}
                   >
-                    {link.icon.includes("/") || link.icon.includes(".") ? (
+                    {typeof link.icon === "string" &&
+                    (link.icon.includes("/") || link.icon.includes(".")) ? (
                       <img
                         src={link.icon}
                         alt={link.label}
                         style={{
-                          width: 18,
-                          height: 18,
+                          width: "100%",
+                          height: "100%",
                           objectFit: "contain",
+                          opacity: active ? 1 : 0.8,
+                        }}
+                        onError={(e) => {
+                          e.target.style.display = "none";
                         }}
                       />
                     ) : (
@@ -280,7 +306,7 @@ export default function DashboardLayout({ children, title }) {
                   justifyContent: "center",
                 }}
               >
-                ⌂
+                <img src="/home.png" alt="Home" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
               </span>
               {!collapsed && <span>Public Site</span>}
             </Link>

@@ -184,9 +184,9 @@ export function AdminBilling() {
   return (
     <DashboardLayout title="Billing Overview">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 28 }}>
-        <StatCard value={`${(data.paid || 0).toLocaleString()} EGP`} label="Revenue Collected" icon="✦" color="#00e676" />
-        <StatCard value={`${(data.unpaid || 0).toLocaleString()} EGP`} label="Outstanding Balance" icon="◈" color="#ff4444" delay={1} />
-        <StatCard value={data.invoices?.length || 0} label="Total Invoices" icon="▤" delay={2} />
+        <StatCard value={`${(data.paid || 0).toLocaleString()} EGP`} label="Revenue Collected" color="#00e676" />
+        <StatCard value={`${(data.unpaid || 0).toLocaleString()} EGP`} label="Outstanding Balance" color="#ff4444" delay={1} />
+        <StatCard value={data.invoices?.length || 0} label="Total Invoices" delay={2} />
       </div>
       <Card title="All Invoices">
         <DataTable

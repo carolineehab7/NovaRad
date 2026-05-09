@@ -978,7 +978,7 @@ const STATUS_COLORS = {
   },
 };
 
-const MODALITY_ICONS = { MRI: "🧲", CT: "💿", "X-Ray": "☢", Ultrasound: "🔊" };
+const MODALITY_ICONS = { MRI: "", CT: "", "X-Ray": "", Ultrasound: "" };
 
 export function Machines() {
   const { user } = useAuth();
@@ -1107,7 +1107,7 @@ export function Machines() {
               marginBottom: 14,
             }}
           >
-            {MODALITY_ICONS[type] || "◎"} {type} Machines
+            {MODALITY_ICONS[type] } {type} Machines
           </div>
           <div
             style={{

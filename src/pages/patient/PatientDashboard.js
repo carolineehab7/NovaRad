@@ -126,25 +126,22 @@ export default function PatientDashboard() {
           marginBottom: 32,
         }}
       >
-        <StatCard value={apptCnt} label="Appointments" icon="◷" delay={0} />
+        <StatCard value={apptCnt} label="Appointments" delay={0} />
         <StatCard
           value={unpaid}
           label="Unpaid Invoices"
-          icon="◈"
           color="#ff4444"
           delay={1}
         />
         <StatCard
           value={data?.records?.length || 0}
           label="Medical Records"
-          icon="▤"
           color="#00e676"
           delay={2}
         />
         <StatCard
           value={data?.patient?.blood_type || "—"}
           label="Blood Type"
-          icon="◎"
           color="#fbbf24"
           delay={3}
         />

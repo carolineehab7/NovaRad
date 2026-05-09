@@ -6,22 +6,22 @@ const PILLARS = [
   {
     title: "Clinical Precision",
     text: "Every scan workflow is standardized to reduce variability, improve consistency, and support confident diagnosis.",
-    icon: "◎",
+    
   },
   {
     title: "Fast Turnaround",
     text: "From booking to finalized report, NovaRad is optimized for speed without compromising image quality.",
-    icon: "◷",
+    
   },
   {
     title: "Patient-First Experience",
     text: "Clear pricing, transparent billing, and a simple portal help patients stay informed at every step.",
-    icon: "⬡",
+    
   },
   {
     title: "Integrated Platform",
     text: "Appointments, reports, images, and billing are connected in one secure system for smoother care delivery.",
-    icon: "◈",
+    
   },
 ];
 
@@ -177,22 +177,7 @@ export default function WhyNovaRadPage() {
                 minHeight: 210,
               }}
             >
-              <div
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 12,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  background: "rgba(0,212,245,0.12)",
-                  color: "var(--nova-cyan)",
-                  fontSize: "1.35rem",
-                  marginBottom: 14,
-                }}
-              >
-                {p.icon}
-              </div>
+
               <h3
                 style={{
                   margin: 0,
