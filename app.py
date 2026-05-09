@@ -211,7 +211,7 @@ def serve_react(path):
         return send_from_directory(REACT_BUILD, 'index.html')
     return jsonify({'error': 'React build not found. Run: npm run build in the frontend/ folder.'}), 404
 
-# ─── Auth API ────────────────────────────────────────────────────
+##### Authentication #####
 # LOGIN
 @app.route('/api/auth/login', methods=['POST'])
 def api_login():
@@ -331,13 +331,13 @@ def api_patient_dashboard():
     cursor.close(); conn.close()
     return jsonify({'patient': patient, 'appointments': appointments, 'invoices': invoices, 'records': records})
 
-# [Caroline Ehab] Patient Profile API
+# Patient Profile
 @app.route('/api/patient/profile', methods=['GET', 'PUT'])
-@role_required('patient')
+@role_required('patient') #makes sure role is patient
 def api_patient_profile():
     patient_id = session['patient_id']
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    if request.method == 'PUT':
+    if request.method == 'PUT': #allow patient to update his profile
         request_data = request.get_json()
         cursor.execute('UPDATE patient SET phone=%s, address=%s, blood_type=%s, medical_history=%s WHERE patient_id=%s',
                     (request_data.get('phone'), request_data.get('address'), request_data.get('blood_type'), request_data.get('medical_history'), patient_id))
@@ -347,7 +347,7 @@ def api_patient_profile():
     cursor.close(); conn.close()
     return jsonify(patient)
 
-# [Caroline Ehab] Appointment Management — List, Slots, Referring Doctors, Book, Cancel
+# Appointments
 @app.route('/api/patient/appointments')
 @role_required('patient')
 def api_patient_appointments():
@@ -357,12 +357,12 @@ def api_patient_appointments():
         FROM appointment
         LEFT JOIN staff t ON appointment.staff_id=t.staff_id
         LEFT JOIN staff r ON appointment.radiologist_id=r.staff_id
-        WHERE appointment.patient_id=%s ORDER BY appointment.scheduled_datetime DESC''', (patient_id,))
-    rows = rows_to_list(cursor.fetchall())
+        WHERE appointment.patient_id=%s ORDER BY appointment.scheduled_datetime DESC''', (patient_id,)) #gets the appointments of the patient and the staff and radiologist names
+    rows = rows_to_list(cursor.fetchall()) #changes data to rows to be in JSON format
     cursor.close(); conn.close()
     return jsonify(rows)
 
-
+# referring doctors list for dropdown in booking form
 @app.route('/api/patient/referring-doctors')
 @role_required('patient')
 def api_patient_referring_doctors():
@@ -377,7 +377,7 @@ def api_patient_referring_doctors():
     cursor.close(); conn.close()
     return jsonify(rows)
 
-
+# available slots for a given date
 @app.route('/api/patient/available-slots')
 @role_required('patient')
 def api_patient_available_slots():
@@ -391,7 +391,7 @@ def api_patient_available_slots():
 
     now = datetime.now()
     all_slots = generate_hourly_slots()
-
+    # Get all taken slots for the selected date
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     cursor.execute('''
         SELECT scheduled_datetime
@@ -400,7 +400,7 @@ def api_patient_available_slots():
     ''', (selected_date,))
     taken = {f"{r['scheduled_datetime'].hour:02d}:{r['scheduled_datetime'].minute:02d}" for r in cursor.fetchall()}
     cursor.close(); conn.close()
-
+    # Filter out taken and past slots
     available = []
     for s in all_slots:
         slot_dt = datetime.fromisoformat(f'{selected_date.isoformat()}T{s}:00')
@@ -412,6 +412,7 @@ def api_patient_available_slots():
 
     return jsonify({'date': selected_date.isoformat(), 'slots': available})
 
+#book appointment
 @app.route('/api/patient/book-appointment', methods=['POST'])
 @role_required('patient')
 def api_book_appointment():
@@ -420,14 +421,13 @@ def api_book_appointment():
     modality = request_data.get('modality', '')
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
-    # Match modality to department keyword, then fall back to any technician/receptionist
     dept_keyword = {
         'MRI':       'MRI',
         'CT':        'CT',
         'X-Ray':     'X-Ray',
         'Ultrasound':'Ultrasound',
     }.get(modality)
-
+    # try to find a technician/radiologist in the relevant department
     staff_id = None
     if dept_keyword:
         cursor.execute(
@@ -437,21 +437,20 @@ def api_book_appointment():
         result = cursor.fetchone()
         if result:
             staff_id = result['staff_id']
-
+    # if not found, assign any available technician/receptionist
     if not staff_id:
         cursor.execute("SELECT staff_id FROM staff WHERE role IN ('technician','receptionist') LIMIT 1")
         result = cursor.fetchone()
         if result:
             staff_id = result['staff_id']
 
-    # Assign radiologist by department: standard imaging → Diagnostic, procedures → Interventional
     rad_dept_keyword = {
         'MRI':       'Diagnostic',
         'CT':        'Diagnostic',
         'X-Ray':     'Diagnostic',
         'Ultrasound':'Diagnostic',
     }.get(modality, 'Diagnostic')
-
+    # try to find a radiologist in the relevant department
     cursor.execute(
         "SELECT staff_id FROM staff WHERE role='radiologist' AND department ILIKE %s LIMIT 1",
         (f'%{rad_dept_keyword}%',)
@@ -462,6 +461,7 @@ def api_book_appointment():
         rad_result = cursor.fetchone()
     radiologist_id = rad_result['staff_id'] if rad_result else None
 
+    # Validate scheduled_datetime (correct format, in the future, in allowed time slots)
     scheduled_str = request_data.get('scheduled_datetime')
     try:
         scheduled_dt = datetime.fromisoformat(scheduled_str)
@@ -482,10 +482,11 @@ def api_book_appointment():
     if cursor.fetchone():
         cursor.close(); conn.close()
         return jsonify({'error': 'This time slot is no longer available. Please choose another slot.'}), 400
-
+    
     price_map = {'MRI': 1500, 'CT': 1200, 'X-Ray': 300, 'Ultrasound': 500}
     amount = price_map.get(modality, 800)
     due_date = (datetime.now() + timedelta(days=30)).date()
+    # Create appointment, imaging order, and invoice in a transaction
     try:
         cursor.execute('INSERT INTO appointment (patient_id, staff_id, radiologist_id, scheduled_datetime, modality, status) VALUES (%s,%s,%s,%s,%s,%s) RETURNING appointment_id',
                     (patient_id, staff_id, radiologist_id, scheduled_dt, modality, 'scheduled'))
@@ -500,7 +501,8 @@ def api_book_appointment():
     except Exception as e:
         conn.rollback(); cursor.close(); conn.close()
         return jsonify({'error': str(e)}), 400
-
+    
+# Cancel appointment
 @app.route('/api/patient/cancel-appointment/<int:appointment_id>', methods=['POST'])
 @role_required('patient')
 def api_cancel_appointment(appointment_id):
@@ -539,12 +541,13 @@ def api_pay_invoice(invoice_id):
     conn.commit(); cursor.close(); conn.close()
     return jsonify({'ok': True})
 
-# [Caroline Ehab] Medical Records — Patient Records
+# Medical Records
 @app.route('/api/patient/records')
 @role_required('patient')
 def api_patient_records():
     patient_id = session['patient_id']
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    # retunrs all medical records of patient with reports and staff names
     cursor.execute('''SELECT medical_record.*, radiology_report.findings_and_impression, radiology_report.report_date, radiology_report.signed, radiology_report.order_id, staff.s_full_name as staff_name
         FROM medical_record LEFT JOIN radiology_report ON medical_record.report_id=radiology_report.report_id
         LEFT JOIN staff ON medical_record.staff_id=staff.staff_id WHERE medical_record.patient_id=%s ORDER BY medical_record.date_created DESC''', (patient_id,))
@@ -569,7 +572,7 @@ def api_staff_dashboard():
     cursor.close(); conn.close()
     return jsonify({'appointments': appointments, 'orders': orders})
 
-# [Caroline Ehab] Appointment Management — Staff Appointments + Update Status
+# Appointments List & Management in staff dashboard
 @app.route('/api/staff/appointments')
 @role_required('radiologist', 'technician', 'receptionist')
 def api_staff_appointments():
@@ -585,6 +588,7 @@ def api_staff_appointments():
     cursor.close(); conn.close()
     return jsonify(rows)
 
+# Update appointment status for patients
 @app.route('/api/staff/update-appointment/<int:appointment_id>', methods=['POST'])
 @role_required('radiologist', 'technician', 'receptionist')
 def api_update_appointment(appointment_id):
@@ -790,51 +794,53 @@ def api_admin_reports():
     cursor.close(); conn.close()
     return jsonify(rows)
 
-# [Caroline Ehab] Medical Records — Upload, Get, Delete Images, Serve
+# upload images for an order (allowed image types: DCM, JPG, JPEG, PNG)
 @app.route('/api/staff/upload-image/<int:order_id>', methods=['POST'])
 @role_required('receptionist', 'technician', 'radiologist', 'admin')
 def api_upload_image(order_id):
     import io
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
-    f = request.files['file']
-    if not f.filename:
+    file = request.files['file']
+    if not file.filename:
         return jsonify({'error': 'Empty filename'}), 400
-    ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else ''
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
     if ext not in ALLOWED_IMAGE_EXTS:
         return jsonify({'error': 'Invalid file type. Allowed: DCM, JPG, JPEG, PNG'}), 400
 
     stored_ext = 'png' if ext == 'dcm' else ext
     stored_name = f"{uuid.uuid4().hex}.{stored_ext}"
-
+    # If DICOM, convert to PNG first
     if ext == 'dcm':
         try:
             import pydicom, numpy as np
             from PIL import Image
-            ds = pydicom.dcmread(io.BytesIO(f.read()))
+            ds = pydicom.dcmread(io.BytesIO(file.read()))
             arr = ds.pixel_array.astype(float)
-            lo, hi = arr.min(), arr.max()
-            if hi > lo:
-                arr = ((arr - lo) / (hi - lo) * 255).astype(np.uint8)
+            low, high = arr.min(), arr.max()
+            if high > low:
+                arr = ((arr - low) / (high - low) * 255).astype(np.uint8) # normalize to 0-255
             else:
                 arr = arr.astype(np.uint8)
+            # if image is gray change it to RGB
             if arr.ndim == 2:
                 img = Image.fromarray(arr, mode='L').convert('RGB')
             else:
-                img = Image.fromarray(arr)
-            buf = io.BytesIO()
-            img.save(buf, format='PNG')
-            file_bytes = buf.getvalue()
+                img = Image.fromarray(arr) #changes it to PIL image, image object
+            buf = io.BytesIO() # add image to buffer
+            img.save(buf, format='PNG') #saves image as PNG
+            file_bytes = buf.getvalue() # get bytes data of the image
         except Exception as e:
             return jsonify({'error': f'DICOM conversion failed: {str(e)}'}), 400
     else:
-        file_bytes = f.read()
-
+        file_bytes = file.read()
+    
+    # Store in DB
     conn = get_db(); cursor = conn.cursor()
     try:
         cursor.execute(
             'INSERT INTO imaging_file (order_id, filename, original_name, file_type, file_data) VALUES (%s,%s,%s,%s,%s) RETURNING file_id',
-            (order_id, stored_name, f.filename, stored_ext, psycopg2.Binary(file_bytes))
+            (order_id, stored_name, file.filename, stored_ext, psycopg2.Binary(file_bytes))
         )
         file_id = cursor.fetchone()[0]
         conn.commit(); cursor.close(); conn.close()
@@ -843,6 +849,7 @@ def api_upload_image(order_id):
         conn.rollback(); cursor.close(); conn.close()
         return jsonify({'error': str(e)}), 400
 
+# get all images for an order
 @app.route('/api/staff/images/<int:order_id>')
 @login_required
 def api_get_images(order_id):
@@ -854,6 +861,7 @@ def api_get_images(order_id):
         row['url'] = f"/api/uploads/{row['filename']}"
     return jsonify(rows)
 
+# serve uploaded image by filename
 @app.route('/api/uploads/<filename>')
 @login_required
 def serve_upload(filename):
@@ -867,6 +875,7 @@ def serve_upload(filename):
     mime = 'image/png' if row[1] in ('png', 'dcm') else f'image/{row[1]}'
     return Response(bytes(row[0]), mimetype=mime)
 
+#chatbot scenarios
 NOVA_SCENARIOS = [
     # Greetings
     (['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'salam', 'السلام'],
