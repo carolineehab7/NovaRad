@@ -159,8 +159,8 @@ try:
 except Exception as _e:
     print(f'Appointment radiologist col outer note: {_e}')
 
-# ─── [Caroline Ehab] User Authentication — Decorators ───────────
-
+# makes sure that user cant reach any protected part without login
+#it redirects him to log in page
 def login_required(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -169,6 +169,7 @@ def login_required(func):
         return func(*args, **kwargs)
     return wrapper
 
+# makes sure that user cant reach any protected part without login and with the right role to each part
 def role_required(*roles):
     def decorator(func):
         @wraps(func)
@@ -181,6 +182,7 @@ def role_required(*roles):
         return wrapper
     return decorator
 
+# change the Database rows to dictionary to be in JSON format
 def row_to_dict(row):
     if row is None: return None
     if hasattr(row, '_asdict'): return row._asdict()
@@ -196,8 +198,7 @@ def row_to_dict(row):
 def rows_to_list(rows):
     return [row_to_dict(r) for r in rows]
 
-# ─── Serve React ─────────────────────────────────────────────────
-
+# Serve the React app
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve_react(path):
@@ -211,26 +212,28 @@ def serve_react(path):
     return jsonify({'error': 'React build not found. Run: npm run build in the frontend/ folder.'}), 404
 
 # ─── Auth API ────────────────────────────────────────────────────
-# [Caroline Ehab] Login, Logout, Me, Register
-
+# LOGIN
 @app.route('/api/auth/login', methods=['POST'])
 def api_login():
+    # takes email and password as input
     request_data = request.get_json()
     email = request_data.get('email', '').strip()
     password = request_data.get('password', '').strip()
     conn = get_db()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cursor.execute('SELECT * FROM "user" WHERE email=%s AND password=%s', (email, password))
+    cursor.execute('SELECT * FROM "user" WHERE email=%s AND password=%s', (email, password)) #checks if email and password stored in database
     user = cursor.fetchone()
     if not user:
         cursor.close(); conn.close()
         return jsonify({'error': 'Invalid email or password'}), 401
+    # if info was correct then it stores the user info in the session
     session['user_id'] = user['user_id']
     session['username'] = user['username']
     session['role'] = user['role']
     session['email'] = user['email']
     role = user['role']
     full_name = user['username']
+    # checks the role and accroding to it gets the data from database
     if role == 'patient':
         cursor.execute('SELECT patient_id, p_full_name FROM patient WHERE user_id=%s', (user['user_id'],))
         patient = cursor.fetchone()
@@ -247,19 +250,23 @@ def api_login():
     cursor.close(); conn.close()
     return jsonify({'user_id': session['user_id'], 'username': session['username'], 'role': role, 'email': session['email'], 'full_name': full_name})
 
+# LOGOUT
 @app.route('/api/auth/logout', methods=['POST'])
 def api_logout():
-    session.clear()
+    session.clear() #clears the session to log out the user
     return jsonify({'ok': True})
 
+# Get current user info
 @app.route('/api/auth/me')
 def api_me():
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
     return jsonify({'user_id': session['user_id'], 'username': session['username'], 'role': session['role'], 'email': session['email'], 'full_name': session.get('full_name', session['username'])})
 
+# REGISTER
 @app.route('/api/auth/register', methods=['POST'])
 def api_register():
+    # asks the user to enter his info
     request_data = request.get_json()
     SSN = request_data.get('SSN', '')
     first_name = request_data.get('fname', '')

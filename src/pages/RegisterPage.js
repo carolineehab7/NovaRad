@@ -57,8 +57,23 @@ export default function RegisterPage() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleChange = (e) =>
-    setForm({ ...form, [e.target.name]: e.target.value });
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    
+    if (name === "SSN") {
+      const digitsOnly = value.replace(/\D/g, "").slice(0, 14);
+      setForm({ ...form, [name]: digitsOnly });
+      return;
+    }
+
+    if (name === "phone") {
+      const digitsOnly = value.replace(/\D/g, "").slice(0, 11);
+      setForm({ ...form, [name]: digitsOnly });
+      return;
+    }
+    
+    setForm({ ...form, [name]: value });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
