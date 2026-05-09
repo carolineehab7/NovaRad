@@ -261,7 +261,7 @@ def api_logout():
 def api_me():
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
-    return jsonify({'user_id': session['user_id'], 'username': session['username'], 'role': session['role'], 'email': session['email'], 'full_name': session.get('full_name', session['username'])})
+    return jsonify({'user_id': session['user_id'], 'username': session['username'], 'role': session['role'], 'email': session['email'], 'full_name': session.get('full_name', session['username']), 'staff_id': session.get('staff_id'), 'patient_id': session.get('patient_id')})
 
 # REGISTER
 @app.route('/api/auth/register', methods=['POST'])
@@ -444,23 +444,40 @@ def api_book_appointment():
         if result:
             staff_id = result['staff_id']
 
-    # Assign radiologist by department: standard imaging → Diagnostic, procedures → Interventional
-    rad_dept_keyword = {
-        'MRI':       'Diagnostic',
-        'CT':        'Diagnostic',
-        'X-Ray':     'Diagnostic',
-        'Ultrasound':'Diagnostic',
-    }.get(modality, 'Diagnostic')
-
-    cursor.execute(
-        "SELECT staff_id FROM staff WHERE role='radiologist' AND department ILIKE %s LIMIT 1",
-        (f'%{rad_dept_keyword}%',)
-    )
-    rad_result = cursor.fetchone()
-    if not rad_result:
-        cursor.execute("SELECT staff_id FROM staff WHERE role='radiologist' LIMIT 1")
+    radiologist_id = None
+    selected_radiologist_id = request_data.get('radiologist_id')
+    if selected_radiologist_id:
+        try:
+            selected_radiologist_id = int(selected_radiologist_id)
+        except (TypeError, ValueError):
+            selected_radiologist_id = None
+    if selected_radiologist_id:
+        cursor.execute(
+            "SELECT staff_id FROM staff WHERE staff_id=%s AND role='radiologist'",
+            (selected_radiologist_id,)
+        )
         rad_result = cursor.fetchone()
-    radiologist_id = rad_result['staff_id'] if rad_result else None
+        if rad_result:
+            radiologist_id = rad_result['staff_id']
+
+    if not radiologist_id:
+        # Assign radiologist by department; pick randomly if no preference was chosen.
+        rad_dept_keyword = {
+            'MRI':       'Diagnostic',
+            'CT':        'Diagnostic',
+            'X-Ray':     'Diagnostic',
+            'Ultrasound':'Diagnostic',
+        }.get(modality, 'Diagnostic')
+
+        cursor.execute(
+            "SELECT staff_id FROM staff WHERE role='radiologist' AND department ILIKE %s ORDER BY RANDOM() LIMIT 1",
+            (f'%{rad_dept_keyword}%',)
+        )
+        rad_result = cursor.fetchone()
+        if not rad_result:
+            cursor.execute("SELECT staff_id FROM staff WHERE role='radiologist' ORDER BY RANDOM() LIMIT 1")
+            rad_result = cursor.fetchone()
+        radiologist_id = rad_result['staff_id'] if rad_result else None
 
     scheduled_str = request_data.get('scheduled_datetime')
     try:
@@ -558,13 +575,31 @@ def api_patient_records():
 @app.route('/api/staff/dashboard')
 @role_required('radiologist', 'technician', 'receptionist')
 def api_staff_dashboard():
+    role = session.get('role')
+    staff_id = session.get('staff_id')
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cursor.execute('''SELECT appointment.*, patient.p_full_name as patient_name FROM appointment JOIN patient ON appointment.patient_id=patient.patient_id
-        WHERE appointment.status='scheduled' ORDER BY appointment.scheduled_datetime ASC LIMIT 10''')
+    appt_filter = ''
+    appt_params = []
+    if role == 'technician':
+        appt_filter = ' AND appointment.staff_id=%s'
+        appt_params = [staff_id]
+    elif role == 'radiologist':
+        appt_filter = ' AND appointment.radiologist_id=%s'
+        appt_params = [staff_id]
+    cursor.execute(f'''SELECT appointment.*, patient.p_full_name as patient_name FROM appointment JOIN patient ON appointment.patient_id=patient.patient_id
+        WHERE appointment.status='scheduled'{appt_filter} ORDER BY appointment.scheduled_datetime ASC LIMIT 10''', appt_params)
     appointments = rows_to_list(cursor.fetchall())
-    cursor.execute('''SELECT imaging_order.*, appointment.scheduled_datetime, appointment.modality, patient.p_full_name as patient_name
+    order_filter = ''
+    order_params = []
+    if role == 'technician':
+        order_filter = ' AND appointment.staff_id=%s'
+        order_params = [staff_id]
+    elif role == 'radiologist':
+        order_filter = ' AND appointment.radiologist_id=%s'
+        order_params = [staff_id]
+    cursor.execute(f'''SELECT imaging_order.*, appointment.scheduled_datetime, appointment.modality, patient.p_full_name as patient_name
         FROM imaging_order JOIN appointment ON imaging_order.appointment_id=appointment.appointment_id
-        JOIN patient ON appointment.patient_id=patient.patient_id WHERE imaging_order.order_status != 'completed' ORDER BY appointment.scheduled_datetime ASC LIMIT 10''')
+        JOIN patient ON appointment.patient_id=patient.patient_id WHERE imaging_order.order_status != 'completed'{order_filter} ORDER BY appointment.scheduled_datetime ASC LIMIT 10''', order_params)
     orders = rows_to_list(cursor.fetchall())
     cursor.close(); conn.close()
     return jsonify({'appointments': appointments, 'orders': orders})
@@ -573,14 +608,24 @@ def api_staff_dashboard():
 @app.route('/api/staff/appointments')
 @role_required('radiologist', 'technician', 'receptionist')
 def api_staff_appointments():
+    role = session.get('role')
+    staff_id = session.get('staff_id')
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cursor.execute('''SELECT appointment.*, patient.p_full_name as patient_name, patient.phone as patient_phone,
+    appt_filter = ''
+    appt_params = []
+    if role == 'technician':
+        appt_filter = ' WHERE appointment.staff_id=%s'
+        appt_params = [staff_id]
+    elif role == 'radiologist':
+        appt_filter = ' WHERE appointment.radiologist_id=%s'
+        appt_params = [staff_id]
+    cursor.execute(f'''SELECT appointment.*, patient.p_full_name as patient_name, patient.phone as patient_phone,
         t.s_full_name as staff_name, r.s_full_name as radiologist_name
         FROM appointment
         JOIN patient ON appointment.patient_id=patient.patient_id
         LEFT JOIN staff t ON appointment.staff_id=t.staff_id
-        LEFT JOIN staff r ON appointment.radiologist_id=r.staff_id
-        ORDER BY appointment.scheduled_datetime DESC''')
+        LEFT JOIN staff r ON appointment.radiologist_id=r.staff_id{appt_filter}
+        ORDER BY appointment.scheduled_datetime DESC''', appt_params)
     rows = rows_to_list(cursor.fetchall())
     cursor.close(); conn.close()
     return jsonify(rows)
@@ -598,11 +643,21 @@ def api_update_appointment(appointment_id):
 @app.route('/api/staff/imaging-orders')
 @role_required('radiologist', 'technician', 'receptionist')
 def api_imaging_orders():
+    role = session.get('role')
+    staff_id = session.get('staff_id')
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cursor.execute('''SELECT imaging_order.*, appointment.scheduled_datetime, appointment.modality, patient.p_full_name as patient_name, radiology_report.report_id, radiology_report.signed
+    order_filter = ''
+    order_params = []
+    if role == 'technician':
+        order_filter = ' WHERE appointment.staff_id=%s'
+        order_params = [staff_id]
+    elif role == 'radiologist':
+        order_filter = ' WHERE appointment.radiologist_id=%s'
+        order_params = [staff_id]
+    cursor.execute(f'''SELECT imaging_order.*, appointment.scheduled_datetime, appointment.modality, patient.p_full_name as patient_name, radiology_report.report_id, radiology_report.signed
         FROM imaging_order JOIN appointment ON imaging_order.appointment_id=appointment.appointment_id
-        JOIN patient ON appointment.patient_id=patient.patient_id LEFT JOIN radiology_report ON radiology_report.order_id=imaging_order.order_id
-        ORDER BY appointment.scheduled_datetime DESC''')
+        JOIN patient ON appointment.patient_id=patient.patient_id LEFT JOIN radiology_report ON radiology_report.order_id=imaging_order.order_id{order_filter}
+        ORDER BY appointment.scheduled_datetime DESC''', order_params)
     rows = rows_to_list(cursor.fetchall())
     cursor.close(); conn.close()
     return jsonify(rows)
@@ -747,11 +802,53 @@ def api_admin_staff():
 @role_required('admin')
 def api_delete_staff(staff_id):
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cursor.execute('SELECT user_id FROM staff WHERE staff_id=%s', (staff_id,))
+    cursor.execute('SELECT user_id, role FROM staff WHERE staff_id=%s', (staff_id,))
     staff_result = cursor.fetchone()
-    if staff_result:
+    if not staff_result:
+        cursor.close(); conn.close()
+        return jsonify({'error': 'Staff member not found.'}), 404
+
+    cursor.execute('SELECT COUNT(*) as cnt FROM appointment WHERE staff_id=%s OR radiologist_id=%s', (staff_id, staff_id))
+    appt_count = cursor.fetchone()['cnt']
+    cursor.execute('SELECT COUNT(*) as cnt FROM radiology_report WHERE radiologist_id=%s', (staff_id,))
+    report_count = cursor.fetchone()['cnt']
+    cursor.execute('SELECT COUNT(*) as cnt FROM medical_record WHERE staff_id=%s', (staff_id,))
+    record_count = cursor.fetchone()['cnt']
+
+    role = staff_result['role']
+    replacement_staff_id = None
+    if appt_count:
+        if role == 'radiologist':
+            cursor.execute("SELECT staff_id FROM staff WHERE role='radiologist' AND staff_id!=%s ORDER BY RANDOM() LIMIT 1", (staff_id,))
+            replacement = cursor.fetchone()
+            replacement_staff_id = replacement['staff_id'] if replacement else None
+            if not replacement_staff_id:
+                cursor.close(); conn.close()
+                return jsonify({'error': 'No other radiologist available to reassign appointments.'}), 409
+            cursor.execute('UPDATE appointment SET radiologist_id=%s WHERE radiologist_id=%s', (replacement_staff_id, staff_id))
+        elif role == 'technician':
+            cursor.execute("SELECT staff_id FROM staff WHERE role='technician' AND staff_id!=%s ORDER BY RANDOM() LIMIT 1", (staff_id,))
+            replacement = cursor.fetchone()
+            replacement_staff_id = replacement['staff_id'] if replacement else None
+            if not replacement_staff_id:
+                cursor.close(); conn.close()
+                return jsonify({'error': 'No other technician available to reassign appointments.'}), 409
+            cursor.execute('UPDATE appointment SET staff_id=%s WHERE staff_id=%s', (replacement_staff_id, staff_id))
+
+    if report_count or record_count:
+        cursor.close(); conn.close()
+        return jsonify({
+            'error': 'Cannot delete staff with linked reports or medical records.'
+        }), 409
+
+    try:
+        cursor.execute('DELETE FROM staff WHERE staff_id=%s', (staff_id,))
         cursor.execute('DELETE FROM "user" WHERE user_id=%s', (staff_result['user_id'],))
         conn.commit()
+    except Exception as e:
+        conn.rollback(); cursor.close(); conn.close()
+        return jsonify({'error': str(e)}), 400
+
     cursor.close(); conn.close()
     return jsonify({'ok': True})
 

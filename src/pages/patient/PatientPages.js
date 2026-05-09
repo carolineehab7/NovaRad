@@ -169,6 +169,7 @@ export function BookAppointment() {
     modality: "",
     body_part: "",
     referring_doctor: "",
+    radiologist_id: "",
     appointment_date: "",
     appointment_time: "",
   });
@@ -241,6 +242,7 @@ export function BookAppointment() {
         modality: "",
         body_part: "",
         referring_doctor: "",
+        radiologist_id: "",
         appointment_date: "",
         appointment_time: "",
       });
@@ -325,12 +327,20 @@ export function BookAppointment() {
                 />
               </div>
               <div>
-                <label style={labelStyle}>Referring Doctor</label>
+                <label style={labelStyle}>Radiologist (optional)</label>
                 <select
-                  value={form.referring_doctor}
-                  onChange={(e) =>
-                    setForm({ ...form, referring_doctor: e.target.value })
-                  }
+                  value={form.radiologist_id}
+                  onChange={(e) => {
+                    const selectedId = e.target.value;
+                    const selected = doctors.find(
+                      (d) => String(d.staff_id) === selectedId,
+                    );
+                    setForm({
+                      ...form,
+                      radiologist_id: selectedId,
+                      referring_doctor: selected?.s_full_name || "",
+                    });
+                  }}
                   style={{ ...fieldStyle, appearance: "none" }}
                 >
                   <option value="" style={{ background: "#061628" }}>
@@ -339,7 +349,7 @@ export function BookAppointment() {
                   {doctors.map((d) => (
                     <option
                       key={d.staff_id}
-                      value={d.s_full_name}
+                      value={d.staff_id}
                       style={{ background: "#061628" }}
                     >
                       {d.s_full_name}
