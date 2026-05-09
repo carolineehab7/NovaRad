@@ -28,9 +28,27 @@ export function StatCard({
           right: 20,
           fontSize: "1.8rem",
           opacity: 0.15,
+          width: 40,
+          height: 40,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
         }}
       >
-        {icon}
+        {typeof icon === "string" && (icon.includes("/") || icon.includes(".")) ? (
+          <img
+            src={icon}
+            alt={label}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+              opacity: 0.15,
+            }}
+          />
+        ) : (
+          icon
+        )}
       </div>
       <div
         style={{

@@ -3,36 +3,36 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 const patientLinks = [
-  { path: "/patient/dashboard", icon: "⬡", label: "Dashboard" },
-  { path: "/patient/profile", icon: "○", label: "My Profile" },
-  { path: "/patient/appointments", icon: "◷", label: "Appointments" },
-  { path: "/patient/book", icon: "+", label: "Book Appointment" },
-  { path: "/patient/records", icon: "▤", label: "Medical Records" },
-  { path: "/patient/billing", icon: "◈", label: "Billing" },
+  { path: "/patient/dashboard", icon: "/dashboard.png", label: "Dashboard" },
+  { path: "/patient/profile", icon: "/account.png", label: "My Profile" },
+  { path: "/patient/appointments", icon: "/appointments.png", label: "Appointments" },
+  { path: "/patient/book", icon: "/bookapp.png", label: "Book Appointment" },
+  { path: "/patient/records", icon: "/medrecords.png", label: "Medical Records" },
+  { path: "/patient/billing", icon: "/bill.png", label: "Billing" },
 ];
 
 const staffLinks = {
   receptionist: [
-    { path: "/staff/dashboard", icon: "⬡", label: "Dashboard" },
-    { path: "/staff/appointments", icon: "◷", label: "Appointments" },
+    { path: "/staff/dashboard", icon: "/dashboard.png", label: "Dashboard" },
+    { path: "/staff/appointments", icon: "/appointments.png", label: "Appointments" },
   ],
   technician: [
-    { path: "/staff/dashboard", icon: "⬡", label: "Dashboard" },
-    { path: "/staff/imaging-orders", icon: "◎", label: "Imaging Orders" },
-    { path: "/staff/machines", icon: "⚙", label: "Machines" },
+    { path: "/staff/dashboard", icon: "/dashboard.png", label: "Dashboard" },
+    { path: "/staff/imaging-orders", icon: "/imaging-orders.png", label: "Imaging Orders" },
+    { path: "/staff/machines", icon: "/machines.png", label: "Machines" },
   ],
   radiologist: [
-    { path: "/staff/dashboard", icon: "⬡", label: "Dashboard" },
-    { path: "/staff/imaging-orders", icon: "◎", label: "Imaging Orders" },
+    { path: "/staff/dashboard", icon: "/dashboard.png", label: "Dashboard" },
+    { path: "/staff/imaging-orders", icon: "/imaging-orders.png", label: "Imaging Orders" },
   ],
 };
 
 const adminLinks = [
-  { path: "/admin/dashboard", icon: "⬡", label: "Dashboard" },
-  { path: "/admin/patients", icon: "○", label: "Patients" },
-  { path: "/admin/staff", icon: "◑", label: "Staff Mgmt" },
-  { path: "/admin/billing", icon: "◈", label: "Billing" },
-  { path: "/admin/reports", icon: "▤", label: "Reports" },
+  { path: "/admin/dashboard", icon: "/dashboard.png", label: "Dashboard" },
+  { path: "/admin/patients", icon: "/account.png", label: "Patients" },
+  { path: "/admin/staff", icon: "/staff.png", label: "Staff Management" },
+  { path: "/admin/billing", icon: "/bill.png", label: "Billing" },
+  { path: "/admin/reports", icon: "/reports.png", label: "Reports" },
 ];
 
 export default function DashboardLayout({ children, title }) {
@@ -50,7 +50,7 @@ export default function DashboardLayout({ children, title }) {
 
   const handleLogout = async () => {
     await logout();
-    navigate("/login");
+    navigate("/");
   };
 
   const styles = {
@@ -215,9 +215,24 @@ export default function DashboardLayout({ children, title }) {
                       flexShrink: 0,
                       width: 20,
                       textAlign: "center",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
                     }}
                   >
-                    {link.icon}
+                    {link.icon.includes("/") || link.icon.includes(".") ? (
+                      <img
+                        src={link.icon}
+                        alt={link.label}
+                        style={{
+                          width: 18,
+                          height: 18,
+                          objectFit: "contain",
+                        }}
+                      />
+                    ) : (
+                      link.icon
+                    )}
                   </span>
                   {!collapsed && <span>{link.label}</span>}
                   {active && !collapsed && (
@@ -260,6 +275,9 @@ export default function DashboardLayout({ children, title }) {
                   flexShrink: 0,
                   width: 20,
                   textAlign: "center",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
                 ⌂
@@ -323,7 +341,7 @@ export default function DashboardLayout({ children, title }) {
               justifyContent: collapsed ? "center" : "flex-start",
             }}
           >
-            <span>⎋</span>
+            <span></span>
             {!collapsed && <span>Logout</span>}
           </button>
         </div>

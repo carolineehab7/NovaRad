@@ -72,12 +72,12 @@ export function StaffDashboard() {
         <StatCard
           value={counts.apptCount || data?.appointments?.length || 0}
           label="Appointments"
-          icon="◷"
+          icon="/appointments.png"
         />
         <StatCard
           value={data?.orders?.length || 0}
           label="Pending Orders"
-          icon="◎"
+          icon="/imaging-orders.png"
           color="#ff4444"
           delay={1}
         />

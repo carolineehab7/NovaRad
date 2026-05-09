@@ -117,9 +117,30 @@ function ModalityPage({ title, subtitle, icon, color, specs, description }) {
               fontSize: "5rem",
               marginBottom: 20,
               filter: `drop-shadow(0 0 30px ${color})`,
+              height: 80,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
-            {icon}
+            {typeof icon === "string" &&
+            (icon.includes("/") || icon.includes(".")) ? (
+              <img
+                src={icon}
+                alt={title}
+                style={{
+                  maxWidth: "100%",
+                  maxHeight: "100%",
+                  objectFit: "contain",
+                  filter: `drop-shadow(0 0 30px ${color})`,
+                }}
+                onError={(e) => {
+                  e.target.style.display = "none";
+                }}
+              />
+            ) : (
+              icon
+            )}
           </div>
           <div
             style={{
@@ -252,7 +273,7 @@ export function MRIPage() {
     <ModalityPage
       title="MRI Imaging"
       subtitle="High-resolution magnetic resonance imaging using powerful magnetic fields and radio waves to produce detailed images of organs and tissues."
-      icon="◎"
+      icon="/machines.png"
       color="#00d4f5"
       specs={[
         ["Tesla Strength", "3.0T"],
@@ -271,7 +292,7 @@ export function CTPage() {
     <ModalityPage
       title="CT Scan"
       subtitle="Computed tomography providing rapid, cross-sectional X-ray images to diagnose complex conditions across all body systems."
-      icon="◈"
+      icon="/ct-scan.png"
       color="#a78bfa"
       specs={[
         ["Detector Rows", "128-slice"],
@@ -290,7 +311,7 @@ export function XRayPage() {
     <ModalityPage
       title="Digital X-Ray"
       subtitle="Instant digital radiography providing clear skeletal and chest imaging with superior quality and minimal radiation exposure."
-      icon="◷"
+      icon="/x-ray.png"
       color="#34d399"
       specs={[
         ["Technology", "Digital (DR)"],
@@ -309,7 +330,7 @@ export function UltrasoundPage() {
     <ModalityPage
       title="Ultrasound"
       subtitle="Real-time sonographic imaging using sound waves — safe, non-invasive, and effective for abdominal, vascular, and obstetric imaging."
-      icon="⬡"
+      icon="/ultrasound.png"
       color="#fbbf24"
       specs={[
         ["Frequency", "2-18 MHz"],

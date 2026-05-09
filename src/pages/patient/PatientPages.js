@@ -551,7 +551,7 @@ export function BookAppointment() {
                 fontSize: "0.875rem",
               }}
             >
-              📋 What happens next?
+              What happens next?
             </div>
             {[
               "Appointment confirmed & invoice generated",

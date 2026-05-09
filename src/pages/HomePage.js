@@ -15,28 +15,28 @@ const NAV_LINKS = [
 const SERVICES = [
   {
     title: "MRI Imaging",
-    icon: "◎",
+    icon: "/machines.png",
     desc: "High-resolution magnetic resonance imaging for soft tissue diagnosis.",
     path: "/mri",
     color: "#00d4f5",
   },
   {
     title: "CT Scan",
-    icon: "◈",
+    icon: "/ct-scan.png",
     desc: "Advanced computed tomography for rapid, detailed cross-sectional views.",
     path: "/ct",
     color: "#a78bfa",
   },
   {
     title: "Digital X-Ray",
-    icon: "◷",
+    icon: "/x-ray.png",
     desc: "Instant digital radiography with superior clarity and low dosage.",
     path: "/x-ray",
     color: "#34d399",
   },
   {
     title: "Ultrasound",
-    icon: "⬡",
+    icon: "/ultrasound.png",
     desc: "Real-time ultrasonic imaging — safe, non-invasive, precise.",
     path: "/ultrasound",
     color: "#fbbf24",
@@ -590,7 +590,24 @@ export default function HomePage() {
               <div
                 style={{ fontSize: "2rem", marginBottom: 16, color: s.color }}
               >
-                {s.icon}
+                {typeof s.icon === "string" &&
+                (s.icon.includes("/") || s.icon.includes(".")) ? (
+                  <img
+                    src={s.icon}
+                    alt={s.title}
+                    style={{
+                      maxWidth: "20%",
+                      maxHeight: "20%",
+                      objectFit: "contain",
+                      filter: `drop-shadow(0 0 30px ${s.color})`,
+                    }}
+                    onError={(e) => {
+                      e.target.style.display = "none";
+                    }}
+                  />
+                ) : (
+                  s.icon
+                )}
               </div>
               <h3
                 style={{
