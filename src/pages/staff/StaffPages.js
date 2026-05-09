@@ -84,7 +84,7 @@ export function StaffDashboard() {
         <StatCard
           value={(user?.role || "").toUpperCase()}
           label="Your Role"
-          icon="◑"
+          icon=""
           color="#00e676"
           delay={2}
         />
