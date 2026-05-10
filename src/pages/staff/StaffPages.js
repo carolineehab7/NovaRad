@@ -14,12 +14,28 @@ import {
 import { staffAPI } from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 
+/**
+ * Staff-facing components for radiologists and imaging technicians:
+ * - Dashboard showing appointments and pending orders
+ * - Appointment management and status updates
+ * - Imaging order processing with image upload capability
+ * - Radiology report writing and signing
+ * - Equipment (machine) status monitoring and maintenance tracking
+ */
+
 /* ─── Staff Dashboard ─────────────────────────────────────────── */
+/**
+ * Main staff overview page displaying:
+ * - Count of appointments to be handled
+ * - Pending imaging orders requiring completion
+ * - User's role displayed as a stat
+ * - Quick view of upcoming appointments and orders
+ */
 export function StaffDashboard() {
-  const { user } = useAuth();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [counts, setCounts] = useState({ apptCount: 0 });
+  const { user } = useAuth(); // Current logged-in staff member
+  const [data, setData] = useState(null); // Dashboard data (appointments, orders)
+  const [loading, setLoading] = useState(true); // Loading state
+  const [counts, setCounts] = useState({ apptCount: 0 }); // Appointment count tracking
 
   useEffect(() => {
     staffAPI
@@ -61,6 +77,7 @@ export function StaffDashboard() {
 
   return (
     <DashboardLayout title="Staff Dashboard">
+      {/* Key metrics: appointment count, pending orders, and staff role */}
       <div
         style={{
           display: "grid",
@@ -90,7 +107,9 @@ export function StaffDashboard() {
         />
       </div>
 
+      {/* Two-column layout: upcoming appointments and pending imaging orders */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+        {/* Upcoming appointments preview card with link to full appointments page */}
         <Card
           title="Upcoming Appointments"
           titleRight={
@@ -101,6 +120,7 @@ export function StaffDashboard() {
             </Link>
           }
         >
+          {/* Table preview of upcoming appointments */}
           <DataTable
             columns={[
               { key: "patient_name", label: "Patient" },
@@ -127,6 +147,7 @@ export function StaffDashboard() {
           />
         </Card>
 
+        {/* Pending imaging orders preview card with link to full orders page */}
         <Card
           title="Pending Imaging Orders"
           titleRight={
@@ -137,6 +158,7 @@ export function StaffDashboard() {
             </Link>
           }
         >
+          {/* Table preview of pending orders requiring image upload or completion */}
           <DataTable
             columns={[
               { key: "patient_name", label: "Patient" },
@@ -158,10 +180,17 @@ export function StaffDashboard() {
 }
 
 /* ─── Staff Appointments ─────────────────────────────────────────── */
+/**
+ * Full appointment management page for staff:
+ * - View all appointments assigned to this staff member
+ * - Update appointment status (scheduled, completed, cancelled, waiting)
+ * - Status dropdown for quick updates to appointment state
+ */
 export function StaffAppointments() {
-  const [appointments, setAppointments] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [appointments, setAppointments] = useState([]); // List of all staff appointments
+  const [loading, setLoading] = useState(true); // Loading state
 
+  // Load appointments from API on component mount
   const load = () =>
     staffAPI
       .appointments()
@@ -171,6 +200,7 @@ export function StaffAppointments() {
     load();
   }, []);
 
+  // Update appointment status via API
   const updateStatus = async (id, status) => {
     await staffAPI.updateAppointment(id, { status });
     load();
@@ -185,6 +215,7 @@ export function StaffAppointments() {
 
   return (
     <DashboardLayout title="Appointment Management">
+      {/* Table of all appointments with status update dropdown */}
       <Card title={`All Appointments (${appointments.length})`}>
         <DataTable
           columns={[
@@ -245,15 +276,23 @@ export function StaffAppointments() {
 }
 
 /* ─── Imaging Orders ─────────────────────────────────────────── */
+/**
+ * Imaging order management for technicians:
+ * - View pending, in-progress, and completed imaging orders
+ * - Filter orders by status
+ * - Update order status as imaging progresses
+ * - Upload imaging files (DICOM, JPG, PNG)
+ * - Link to radiology report writing for radiologists
+ */
 export function ImagingOrders() {
-  const { user } = useAuth();
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [uploadingId, setUploadingId] = useState(null);
-  const [uploadMsg, setUploadMsg] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const fileInputRef = React.useRef(null);
-  const pendingOrderRef = React.useRef(null);
+  const { user } = useAuth(); // Current staff member
+  const [orders, setOrders] = useState([]); // List of imaging orders
+  const [loading, setLoading] = useState(true); // Loading state
+  const [uploadingId, setUploadingId] = useState(null); // ID of order being uploaded
+  const [uploadMsg, setUploadMsg] = useState(""); // Upload status message
+  const [statusFilter, setStatusFilter] = useState("all"); // Current status filter
+  const fileInputRef = React.useRef(null); // Reference to hidden file input
+  const pendingOrderRef = React.useRef(null); // Reference to currently uploading order
 
   const load = () =>
     staffAPI
@@ -264,22 +303,27 @@ export function ImagingOrders() {
     load();
   }, []);
 
+  // Filter orders based on selected status filter
   const filteredOrders =
     statusFilter === "all"
       ? orders
       : orders.filter((o) => o.order_status === statusFilter);
 
+  // Update imaging order status
   const updateOrder = async (id, order_status) => {
     await staffAPI.updateOrder(id, { order_status });
     load();
   };
 
+  // Trigger file picker for image upload
   const triggerUpload = (orderId) => {
     pendingOrderRef.current = orderId;
     fileInputRef.current.value = "";
     fileInputRef.current.click();
   };
 
+  // Handle file selection and upload
+  // Handle file selection and upload
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
     const orderId = pendingOrderRef.current;
@@ -287,6 +331,7 @@ export function ImagingOrders() {
     setUploadingId(orderId);
     setUploadMsg("");
     try {
+      // Upload image file to server
       await staffAPI.uploadImage(orderId, file);
       setUploadMsg(`Image uploaded successfully for order #${orderId}`);
     } catch (err) {
@@ -304,6 +349,7 @@ export function ImagingOrders() {
       </DashboardLayout>
     );
 
+  // Count orders by status for filter tabs
   const statusCounts = {
     all: orders.length,
     pending: orders.filter((o) => o.order_status === "pending").length,
@@ -314,6 +360,7 @@ export function ImagingOrders() {
 
   return (
     <DashboardLayout title="Imaging Order Management">
+      {/* Hidden file input for image uploads */}
       <input
         type="file"
         ref={fileInputRef}
@@ -321,6 +368,7 @@ export function ImagingOrders() {
         style={{ display: "none" }}
         onChange={handleFileChange}
       />
+      {/* Display upload success/error messages */}
       {uploadMsg && (
         <div
           style={{
@@ -340,6 +388,7 @@ export function ImagingOrders() {
           {uploadMsg}
         </div>
       )}
+      {/* Status filter buttons to view orders by status */}
       <div
         style={{ marginBottom: 24, display: "flex", gap: 12, flexWrap: "wrap" }}
       >
@@ -1125,7 +1174,7 @@ export function Machines() {
               marginBottom: 14,
             }}
           >
-            {MODALITY_ICONS[type] } {type} Machines
+            {MODALITY_ICONS[type]} {type} Machines
           </div>
           <div
             style={{

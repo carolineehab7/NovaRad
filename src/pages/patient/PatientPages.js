@@ -1,3 +1,12 @@
+/**
+ * Patient-facing components for managing medical appointments, payments, and records:
+ * - View and cancel appointments
+ * - Book new appointments with date and time slot selection
+ * - Pay invoices through payment modal with test card support
+ * - View patient billing history
+ * - Access and download medical records and radiology reports
+ */
+
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import DashboardLayout from "../../components/DashboardLayout";
@@ -11,10 +20,18 @@ import {
 } from "../../components/UI";
 import { patientAPI } from "../../api/client";
 
+/**
+ * Main patient appointments page:
+ * - Display all upcoming and past appointments
+ * - Sort appointments with upcoming scheduled ones first
+ * - Cancel scheduled appointments
+ * - Quick link to book new appointments
+ */
 export function PatientAppointments() {
-  const [appointments, setAppointments] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [appointments, setAppointments] = useState([]); // All patient appointments
+  const [loading, setLoading] = useState(true); // Loading state
 
+  // Fetch appointments from API on component mount
   const load = () =>
     patientAPI
       .appointments()
@@ -24,6 +41,7 @@ export function PatientAppointments() {
     load();
   }, []);
 
+  // Cancel an appointment with user confirmation
   const cancel = async (id) => {
     if (!window.confirm("Cancel this appointment?")) return;
     try {
@@ -34,6 +52,7 @@ export function PatientAppointments() {
     }
   };
 
+  // Sort appointments: upcoming first, then by date
   const now = Date.now();
   const sortedAppointments = [...appointments].sort((a, b) => {
     const aTime = a?.scheduled_datetime
@@ -59,6 +78,7 @@ export function PatientAppointments() {
 
   return (
     <DashboardLayout title="My Appointments">
+      {/* Header with button to book new appointment */}
       <div
         style={{
           display: "flex",
@@ -70,6 +90,7 @@ export function PatientAppointments() {
           <Button variant="cyan">+ Book New Appointment</Button>
         </Link>
       </div>
+      {/* Table of all appointments with cancellation option for upcoming ones */}
       <Card title={`All Appointments (${appointments.length})`}>
         <DataTable
           columns={[
@@ -94,6 +115,7 @@ export function PatientAppointments() {
             {
               key: "status",
               label: "Status",
+              // Custom status rendering: highlight upcoming appointments, show completed differently
               render: (v, row) => {
                 const t = row?.scheduled_datetime
                   ? new Date(row.scheduled_datetime).getTime()
@@ -122,6 +144,7 @@ export function PatientAppointments() {
                   );
                 }
                 if (!isUpcoming) return <Badge status={v} />;
+                // Highlight upcoming appointments with green color
                 return (
                   <span
                     style={{
@@ -147,6 +170,7 @@ export function PatientAppointments() {
           ]}
           data={sortedAppointments}
           emptyMsg="No appointments yet. Book your first one!"
+          // Show cancel button for scheduled upcoming appointments
           actions={(row) =>
             row.status === "scheduled" ? (
               <Button
@@ -164,7 +188,17 @@ export function PatientAppointments() {
   );
 }
 
+/**
+ * Appointment booking interface:
+ * - Select imaging modality and body part
+ * - Choose appointment date with minimum 1 day advance notice
+ * - View available time slots (09:00 - 21:00) for selected date
+ * - Optional radiologist selection
+ * - Display estimated cost for selected modality
+ * - Shows booking workflow steps
+ */
 export function BookAppointment() {
+  // Form state for appointment booking
   const [form, setForm] = useState({
     modality: "",
     body_part: "",
@@ -173,20 +207,23 @@ export function BookAppointment() {
     appointment_date: "",
     appointment_time: "",
   });
-  const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState({ text: "", type: "" });
-  const [doctors, setDoctors] = useState([]);
-  const [availableSlots, setAvailableSlots] = useState([]);
-  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // Booking submission loading state
+  const [msg, setMsg] = useState({ text: "", type: "" }); // Success/error messages
+  const [doctors, setDoctors] = useState([]); // Available referring doctors
+  const [availableSlots, setAvailableSlots] = useState([]); // Available time slots for selected date
+  const [slotsLoading, setSlotsLoading] = useState(false); // Time slot loading state
 
+  // Pricing for each imaging modality
   const prices = { MRI: 1500, CT: 1200, "X-Ray": 300, Ultrasound: 500 };
 
+  // Minimum date is today (1 day advance notice required)
   const minDate = (() => {
     const d = new Date();
     const tzAdjusted = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
     return tzAdjusted.toISOString().slice(0, 10);
   })();
 
+  // Load available referring doctors on component mount
   useEffect(() => {
     patientAPI
       .referringDoctors()
@@ -194,6 +231,7 @@ export function BookAppointment() {
       .catch(() => setDoctors([]));
   }, []);
 
+  // Fetch available time slots when appointment date changes
   useEffect(() => {
     if (!form.appointment_date) {
       setAvailableSlots([]);
@@ -206,6 +244,7 @@ export function BookAppointment() {
       .then((r) => {
         const slots = r.data?.slots || [];
         setAvailableSlots(slots);
+        // Keep previously selected time if still available
         setForm((prev) => ({
           ...prev,
           appointment_time: slots.includes(prev.appointment_time)
@@ -220,6 +259,7 @@ export function BookAppointment() {
       .finally(() => setSlotsLoading(false));
   }, [form.appointment_date]);
 
+  // Submit appointment booking request
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMsg({ text: "", type: "" });
@@ -231,6 +271,7 @@ export function BookAppointment() {
       return;
     }
     setLoading(true);
+    // Combine date and time into ISO datetime string
     const scheduled_datetime = `${form.appointment_date}T${form.appointment_time}`;
     try {
       await patientAPI.bookAppointment({ ...form, scheduled_datetime });
