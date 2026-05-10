@@ -345,10 +345,13 @@ def api_register():
 
 # ─── Patient API ────────────────────────────────────────────────
 
-# [Mohamed Mostafa] Patient Dashboard
+# Patient Dashboard
 @app.route('/api/patient/dashboard')
 @role_required('patient')
 def api_patient_dashboard():
+    # this endpoint returns the patient info
+    # last 5 appointments, last 5 invoices
+    # last 5 medical records to be shown in the dashboard
     patient_id = session['patient_id']
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     cursor.execute('SELECT * FROM patient WHERE patient_id=%s', (patient_id,))
@@ -388,6 +391,7 @@ def api_patient_profile():
 @role_required('patient')
 def api_patient_appointments():
     patient_id = session['patient_id']
+    # this endpoint returns all appointments of the patient with the staff and radiologist names to be shown in the appointments page
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     cursor.execute('''SELECT appointment.*, t.s_full_name as staff_name, r.s_full_name as radiologist_name
         FROM appointment
@@ -417,14 +421,16 @@ def api_patient_referring_doctors():
 @app.route('/api/patient/available-slots')
 @role_required('patient')
 def api_patient_available_slots():
-    date_str = (request.args.get('date') or '').strip() 
-    if not date_str: #if date is empty return error
+    # this endpoint takes a date as query parameter and returns the available hourly slots for that date 
+    # that are not taken by other appointments and not in the past to be shown in the booking form
+    date_str = (request.args.get('date') or '').strip()
+    if not date_str:
         return jsonify({'error': 'date is required (YYYY-MM-DD)'}), 400
     try:
         selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
     except ValueError:
         return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD.'}), 400
-
+# if the selected date is in the past, return empty slots
     now = datetime.now()
     all_slots = generate_hourly_slots()
     # Get all taken slots for the selected date
@@ -452,10 +458,11 @@ def api_patient_available_slots():
 @app.route('/api/patient/book-appointment', methods=['POST'])
 @role_required('patient')
 def api_book_appointment():
-    patient_id = session['patient_id']
+    patient_id = session['patient_id'] #gets the patient id from the session to link the appointment to the patient who is booking it
     request_data = request.get_json()
-    modality = request_data.get('modality', '') #gets modality
-    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    modality = request_data.get('modality', '')
+    # gets the modality from the request data to determine the department and assign the appropriate staff and radiologist for the appointment
+    conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor) #dict cursor to get column names with the data
 
     dept_keyword = {
         'MRI':       'MRI',
@@ -536,7 +543,7 @@ def api_book_appointment():
     if cursor.fetchone():
         cursor.close(); conn.close()
         return jsonify({'error': 'This time slot is no longer available. Please choose another slot.'}), 400
-    
+    # Determine price based on modality for invoice creation
     price_map = {'MRI': 1500, 'CT': 1200, 'X-Ray': 300, 'Ultrasound': 500}
     amount = price_map.get(modality, 800)
     due_date = (datetime.now() + timedelta(days=30)).date()
@@ -561,6 +568,10 @@ def api_book_appointment():
 @role_required('patient')
 def api_cancel_appointment(appointment_id):
     patient_id = session['patient_id']
+    # when cancelling an appointment, we need to update the appointment status to 'cancelled'
+    # refund the invoice if it was paid
+    # cancel the invoice if it was unpaid, and cancel any pending imaging orders linked to that appointment.
+    # all of this should be done in a transaction to ensure data integrity.
     conn = get_db(); cursor = conn.cursor()
     # when cancelling an appointment, update status to cancelled in (appointment, invoice, imaging_order) 
     # if there is a paid invoice, change it to refunded
@@ -578,11 +589,13 @@ def api_cancel_appointment(appointment_id):
         conn.rollback(); cursor.close(); conn.close()
         return jsonify({'error': str(e)}), 400
 
-# [Mohamed Mostafa] Billing & Payments — Patient Billing + Pay Invoice
+# Billing & Payments — Patient Billing + Pay Invoice
 @app.route('/api/patient/billing')
 @role_required('patient')
 def api_patient_billing():
     patient_id = session['patient_id']
+    # this endpoint returns all invoices of the patient with the appointment modality and scheduled date to be shown in the billing page
+    # also allows the patient to pay the invoice which updates the invoice status to 'paid'.
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     cursor.execute('''SELECT invoice.*, appointment.modality, appointment.scheduled_datetime FROM invoice
         LEFT JOIN appointment ON invoice.appointment_id=appointment.appointment_id WHERE invoice.patient_id=%s ORDER BY invoice.due_date DESC''', (patient_id,))
@@ -605,7 +618,7 @@ def api_pay_invoice(invoice_id):
 def api_patient_records():
     patient_id = session['patient_id']
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    # retunrs all medical records of patient with reports and staff names
+    # returns all medical records of patient with reports and staff names
     cursor.execute('''SELECT medical_record.*, radiology_report.findings_and_impression, radiology_report.report_date, radiology_report.signed, radiology_report.order_id, staff.s_full_name as staff_name
         FROM medical_record LEFT JOIN radiology_report ON medical_record.report_id=radiology_report.report_id
         LEFT JOIN staff ON medical_record.staff_id=staff.staff_id WHERE medical_record.patient_id=%s ORDER BY medical_record.date_created DESC''', (patient_id,))
@@ -615,11 +628,15 @@ def api_patient_records():
 
 # ─── Staff API ──────────────────────────────────────────────────
 
-# [Mohamed Mostafa] Staff Dashboard
+# Staff Dashboard
 @app.route('/api/staff/dashboard')
 @role_required('radiologist', 'technician', 'receptionist')
 def api_staff_dashboard():
     role = session.get('role')
+    # depending on the role, the dashboard will show different data:
+    # for technicians: show upcoming appointments assigned to them and pending imaging orders for those appointments
+    # for radiologists: show upcoming appointments assigned to them, pending imaging orders for those appointments, and unsigned reports
+    # for receptionists: show all upcoming appointments and pending imaging orders
     staff_id = session.get('staff_id')
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     appt_filter = ''
@@ -641,6 +658,7 @@ def api_staff_dashboard():
     elif role == 'radiologist':
         order_filter = ' AND appointment.radiologist_id=%s'
         order_params = [staff_id]
+        # It ensures that only pending and in_progress orders are shown in the dashboard.
     cursor.execute(f'''SELECT imaging_order.*, appointment.scheduled_datetime, appointment.modality, patient.p_full_name as patient_name
         FROM imaging_order JOIN appointment ON imaging_order.appointment_id=appointment.appointment_id
         JOIN patient ON appointment.patient_id=patient.patient_id WHERE imaging_order.order_status NOT IN ('completed', 'cancelled'){order_filter} ORDER BY appointment.scheduled_datetime ASC LIMIT 10''', order_params)
@@ -663,6 +681,7 @@ def api_staff_appointments():
     elif role == 'radiologist':
         appt_filter = ' WHERE appointment.radiologist_id=%s'
         appt_params = [staff_id]
+ # It ensures that all appointments related to the staff are shown in the appointments list, not just the scheduled ones, to allow them to manage (update status) for past and upcoming appointments.
     cursor.execute(f'''SELECT appointment.*, patient.p_full_name as patient_name, patient.phone as patient_phone,
         t.s_full_name as staff_name, r.s_full_name as radiologist_name
         FROM appointment
@@ -675,8 +694,11 @@ def api_staff_appointments():
     return jsonify(rows)
 
 # Update appointment status for patients
+#here the appointment is sent in the url due to the fact that we need to identify which appointment to update, and the new status is sent in the request body as JSON data.
 @app.route('/api/staff/update-appointment/<int:appointment_id>', methods=['POST'])
 @role_required('radiologist', 'technician', 'receptionist')
+# This endpoint allows staff to update the appointment status to 'completed', 'cancelled', or 'no_show' based on the appointment outcome. 
+# This is important for accurate record-keeping and billing.
 def api_update_appointment(appointment_id):
     request_data = request.get_json()
     conn = get_db(); cursor = conn.cursor()
@@ -684,7 +706,7 @@ def api_update_appointment(appointment_id):
     conn.commit(); cursor.close(); conn.close()
     return jsonify({'ok': True})
 
-# [Mohamed Mostafa] Imaging Orders & Radiology Reports — List Orders, Update Order, Report GET/POST
+# Imaging Orders & Radiology Reports — List Orders, Update Order, Report GET/POST
 @app.route('/api/staff/imaging-orders')
 @role_required('radiologist', 'technician', 'receptionist')
 def api_imaging_orders():
@@ -699,6 +721,8 @@ def api_imaging_orders():
     elif role == 'radiologist':
         order_filter = ' WHERE appointment.radiologist_id=%s'
         order_params = [staff_id]
+    # It ensures that all orders related to the staff are shown in the orders list, not just the pending ones
+    # to allow them to manage (update status, add report) for past and upcoming orders.
     cursor.execute(f'''SELECT imaging_order.*, appointment.scheduled_datetime, appointment.modality, patient.p_full_name as patient_name, radiology_report.report_id, radiology_report.signed
         FROM imaging_order JOIN appointment ON imaging_order.appointment_id=appointment.appointment_id
         JOIN patient ON appointment.patient_id=patient.patient_id LEFT JOIN radiology_report ON radiology_report.order_id=imaging_order.order_id{order_filter}
@@ -706,7 +730,7 @@ def api_imaging_orders():
     rows = rows_to_list(cursor.fetchall())
     cursor.close(); conn.close()
     return jsonify(rows)
-
+# This endpoint allows staff to update the imaging order status to 'in_progress', 'completed', or 'cancelled' based on the order progress.
 @app.route('/api/staff/update-order/<int:order_id>', methods=['POST'])
 @role_required('radiologist', 'technician', 'receptionist')
 def api_update_order(order_id):
@@ -715,7 +739,7 @@ def api_update_order(order_id):
     cursor.execute('UPDATE imaging_order SET order_status=%s WHERE order_id=%s', (request_data.get('order_status'), order_id))
     conn.commit(); cursor.close(); conn.close()
     return jsonify({'ok': True})
-
+# This endpoint allows radiologists to view the details of an imaging order and submit a radiology report for that order.
 @app.route('/api/staff/radiology-report/<int:order_id>', methods=['GET', 'POST'])
 @role_required('radiologist')
 def api_radiology_report(order_id):
@@ -730,10 +754,12 @@ def api_radiology_report(order_id):
         report = row_to_dict(cursor.fetchone())
         cursor.close(); conn.close()
         return jsonify({'order': order, 'report': report})
+    # when submitting the report, the radiologist can enter the findings and impression, and choose to sign the report which indicates that it's finalized.
     request_data = request.get_json()
     findings = request_data.get('findings', '')
     signed = request_data.get('signed', False)
     try:
+        # if a report already exists for this order, update it. Otherwise, create a new report.
         cursor.execute('SELECT * FROM radiology_report WHERE order_id=%s', (order_id,))
         existing = cursor.fetchone()
         if existing:
@@ -743,6 +769,8 @@ def api_radiology_report(order_id):
             cursor.execute('INSERT INTO radiology_report (order_id, radiologist_id, findings_and_impression, signed) VALUES (%s,%s,%s,%s) RETURNING report_id',
                         (order_id, staff_id, findings, signed))
             report_id = cursor.fetchone()[0]
+            # when a report is submitted, we also want to update the imaging order status to 'completed' and create a medical record entry for the patient with the report findings. 
+            # This ensures that the patient's medical history is updated with the latest information from the imaging study.
             cursor.execute('UPDATE imaging_order SET order_status=%s WHERE order_id=%s', ('completed', order_id))
             cursor.execute('SELECT patient_id FROM appointment JOIN imaging_order ON imaging_order.appointment_id=appointment.appointment_id WHERE imaging_order.order_id=%s', (order_id,))
             result = cursor.fetchone()
@@ -757,7 +785,7 @@ def api_radiology_report(order_id):
     except Exception as e:
         conn.rollback(); cursor.close(); conn.close()
         return jsonify({'error': str(e)}), 400
-
+# This endpoint allows staff to delete an imaging file associated with a report. This is useful for removing incorrect or outdated images from the system.
 @app.route('/api/staff/images/<int:file_id>', methods=['DELETE'])
 @role_required('receptionist', 'technician', 'radiologist', 'admin')
 def api_delete_image(file_id):
@@ -770,22 +798,24 @@ def api_delete_image(file_id):
         conn.rollback(); cursor.close(); conn.close()
         return jsonify({'error': str(e)}), 400
 
-# [Mohamed Mostafa] Imaging Orders & Radiology Reports — Machines
+# Imaging Orders & Radiology Reports — Machines
 @app.route('/api/staff/machines')
 @role_required('radiologist', 'technician', 'receptionist', 'admin')
 def api_get_machines():
+# this endpoint returns the list of machines with their status and notes to be shown in the staff dashboard
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     cursor.execute('SELECT * FROM machine ORDER BY type, machine_id')
     rows = rows_to_list(cursor.fetchall())
     cursor.close(); conn.close()
     return jsonify(rows)
-
+# This endpoint allows technicians to update the machine status and notes when performing maintenance or repairs.
 @app.route('/api/staff/machines/<int:machine_id>', methods=['PUT'])
 @role_required('technician', 'admin')
 def api_update_machine(machine_id):
     data = request.get_json()
     conn = get_db(); cursor = conn.cursor()
     fields, vals = [], []
+    # allow updating status, notes, and last maintenance date for simplicity. 
     for col in ('status', 'notes', 'last_maintenance'):
         if col in data:
             fields.append(f'{col}=%s')
@@ -799,11 +829,13 @@ def api_update_machine(machine_id):
 
 # ─── Admin API ──────────────────────────────────────────────────
 
-# [Mohamed Mostafa] Admin Dashboard
+# Admin Dashboard
 @app.route('/api/admin/dashboard')
 @role_required('admin')
 def api_admin_dashboard():
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    # the admin dashboard shows key metrics like total patients, total staff, pending appointments, unpaid invoices, and total revenue. 
+    # It also shows a list of recent appointments with patient and staff details for quick access.
     cursor.execute('SELECT COUNT(*) as cnt FROM patient'); total_patients = cursor.fetchone()['cnt']
     cursor.execute('SELECT COUNT(*) as cnt FROM staff'); total_staff = cursor.fetchone()['cnt']
     cursor.execute("SELECT COUNT(*) as cnt FROM appointment WHERE status='scheduled'"); pending_appts = cursor.fetchone()['cnt']
@@ -816,15 +848,17 @@ def api_admin_dashboard():
         LEFT JOIN staff t ON appointment.staff_id=t.staff_id
         LEFT JOIN staff r ON appointment.radiologist_id=r.staff_id
         ORDER BY appointment.scheduled_datetime DESC LIMIT 10''')
+    # It ensures that the recent appointments list includes all appointments regardless of their status to give the admin a complete overview of recent activity.
     recent_appts = rows_to_list(cursor.fetchall())
     cursor.close(); conn.close()
     return jsonify({'total_patients': total_patients, 'total_staff': total_staff, 'pending_appts': pending_appts,
                     'unpaid_invoices': unpaid_invoices, 'total_revenue': int(total_revenue), 'recent_appts': recent_appts})
 
-# [Mohamed Mostafa] Admin Management — Staff CRUD + Patients List
+# Admin Management — Staff CRUD + Patients List
 @app.route('/api/admin/staff', methods=['GET', 'POST'])
 @role_required('admin')
 def api_admin_staff():
+    # this endpoint allows the admin to create new staff members by providing their username, password, email, full name, role, and department (if applicable).
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     if request.method == 'POST':
         request_data = request.get_json()
@@ -845,6 +879,9 @@ def api_admin_staff():
 
 @app.route('/api/admin/staff/<int:staff_id>', methods=['DELETE'])
 @role_required('admin')
+# when deleting a staff member, we need to check if they have any upcoming appointments and reassign those appointments to another staff member in the same role if possible.
+# If the staff member has linked radiology reports or medical records, we should prevent deletion to avoid orphaned records and maintain data integrity. 
+# This ensures that the system remains consistent and functional even when staff members are removed.
 def api_delete_staff(staff_id):
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     cursor.execute('SELECT user_id, role FROM staff WHERE staff_id=%s', (staff_id,))
@@ -879,7 +916,7 @@ def api_delete_staff(staff_id):
                 cursor.close(); conn.close()
                 return jsonify({'error': 'No other technician available to reassign appointments.'}), 409
             cursor.execute('UPDATE appointment SET staff_id=%s WHERE staff_id=%s', (replacement_staff_id, staff_id))
-
+# For receptionists, we can allow deletion without reassignment since they are not directly linked to appointments in a critical way.
     if report_count or record_count:
         cursor.close(); conn.close()
         return jsonify({
@@ -897,6 +934,7 @@ def api_delete_staff(staff_id):
     cursor.close(); conn.close()
     return jsonify({'ok': True})
 
+# This endpoint returns the list of all patients with their contact details for the admin to have an overview of the patient base and manage patient records if needed.
 @app.route('/api/admin/patients')
 @role_required('admin')
 def api_admin_patients():
@@ -906,10 +944,12 @@ def api_admin_patients():
     cursor.close(); conn.close()
     return jsonify(rows)
 
-# [Mohamed Mostafa] Billing & Payments — Admin Billing
+# Billing & Payments — Admin Billing
 @app.route('/api/admin/billing')
 @role_required('admin')
 def api_admin_billing():
+    # this endpoint returns all invoices with patient name, appointment modality, and scheduled date for the admin to review all billing transactions and monitor revenue.
+    # It also returns the total paid and unpaid amounts for a quick financial overview.
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     cursor.execute('''SELECT invoice.*, patient.p_full_name, appointment.modality, appointment.scheduled_datetime FROM invoice
         JOIN patient ON invoice.patient_id=patient.patient_id JOIN appointment ON invoice.appointment_id=appointment.appointment_id ORDER BY invoice.due_date DESC''')
@@ -919,10 +959,11 @@ def api_admin_billing():
     cursor.close(); conn.close()
     return jsonify({'invoices': invoices, 'paid': int(paid), 'unpaid': int(unpaid)})
 
-# [Mohamed Mostafa] Imaging Orders & Radiology Reports — Admin Reports
+# Imaging Orders & Radiology Reports — Admin Reports
 @app.route('/api/admin/reports')
 @role_required('admin')
 def api_admin_reports():
+    # this endpoint returns all radiology reports with order, patient, and staff details for the admin to review and monitor the quality of reports and staff performance.
     conn = get_db(); cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     cursor.execute('''SELECT radiology_report.*, staff.s_full_name as radiologist_name, imaging_order.modality, imaging_order.body_part, patient.p_full_name as patient_name
         FROM radiology_report JOIN staff ON radiology_report.radiologist_id=staff.staff_id
@@ -931,7 +972,7 @@ def api_admin_reports():
     rows = rows_to_list(cursor.fetchall())
     cursor.close(); conn.close()
     return jsonify(rows)
-
+#-----------------------------------
 # upload images for an order (allowed image types: DCM, JPG, JPEG, PNG)
 @app.route('/api/staff/upload-image/<int:order_id>', methods=['POST'])
 @role_required('receptionist', 'technician', 'radiologist', 'admin')
@@ -1112,6 +1153,8 @@ NOVA_SCENARIOS = [
      "I'm Nova, your NovaRad assistant. Here is what I can help you with:\n- How to book, cancel, or reschedule appointments\n- Service prices (MRI, CT, X-Ray, Ultrasound)\n- How to pay invoices online\n- Viewing your radiology results and scan images\n- Understanding your medical records\n- Registration and login\n- Contacting the center\nJust type your question and I'll guide you!"),
 ]
 
+# This function takes the user's message as input, checks it against the predefined scenarios, and returns the appropriate response.
+# If no keywords match, it provides a default response with guidance on what the chatbot can assist with and contact information for further help.
 def nova_reply(msg):
     ml = msg.lower()
     for keywords, reply in NOVA_SCENARIOS:
