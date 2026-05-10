@@ -1109,7 +1109,7 @@ NOVA_SCENARIOS = [
 
     # Reschedule
     (['reschedule', 'change appointment', 'change date', 'change time', 'move appointment'],
-     "To reschedule an appointment, you need to cancel the existing one first, then book a new appointment with your preferred date and time. Go to 'My Appointments' to cancel, then 'Book Appointment' to create a new one."),
+     "To reschedule an appointment:\n1. Go to 'My Appointments' in your Patient Dashboard\n2. Find the appointment you want to reschedule (it must still be in 'Scheduled' status)\n3. Click the 'Reschedule' button next to it\n4. Pick a new date — available time slots for that day will load automatically\n5. Select a time slot and click 'Confirm Reschedule'\nYour appointment will be updated instantly. The same invoice and imaging order remain linked — no new payment is needed."),
 
     # View appointments
     (['my appointments', 'view appointments', 'see appointments', 'check appointments', 'appointment status', 'appointment list'],
