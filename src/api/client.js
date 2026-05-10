@@ -22,6 +22,7 @@ export const patientAPI = {
     api.get(`/patient/available-slots?date=${encodeURIComponent(date)}`),
   bookAppointment: (data) => api.post("/patient/book-appointment", data),
   cancelAppointment: (id) => api.post(`/patient/cancel-appointment/${id}`),
+  rescheduleAppointment: (id, data) => api.post(`/patient/reschedule-appointment/${id}`, data),
   billing: () => api.get("/patient/billing"),
   payInvoice: (id) => api.post(`/patient/pay-invoice/${id}`),
   records: () => api.get("/patient/records"),

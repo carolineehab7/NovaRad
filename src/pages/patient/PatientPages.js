@@ -17,6 +17,7 @@ import {
   Button,
   Spinner,
   Alert,
+  Modal,
 } from "../../components/UI";
 import { patientAPI } from "../../api/client";
 
@@ -30,6 +31,15 @@ import { patientAPI } from "../../api/client";
 export function PatientAppointments() {
   const [appointments, setAppointments] = useState([]); // All patient appointments
   const [loading, setLoading] = useState(true); // Loading state
+
+  // Reschedule modal state
+  const [rescheduleTarget, setRescheduleTarget] = useState(null); // appointment being rescheduled
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  const [rescheduleSlots, setRescheduleSlots] = useState([]);
+  const [rescheduleTime, setRescheduleTime] = useState("");
+  const [rescheduleLoading, setRescheduleLoading] = useState(false);
+  const [rescheduleError, setRescheduleError] = useState("");
+  const [slotsLoading, setSlotsLoading] = useState(false);
 
   // Fetch appointments from API on component mount
   const load = () =>
@@ -49,6 +59,53 @@ export function PatientAppointments() {
       load();
     } catch (err) {
       alert(err.response?.data?.error || "Failed to cancel appointment.");
+    }
+  };
+
+  // Open reschedule modal for a given appointment
+  const openReschedule = (row) => {
+    setRescheduleTarget(row);
+    setRescheduleDate("");
+    setRescheduleTime("");
+    setRescheduleSlots([]);
+    setRescheduleError("");
+  };
+
+  // Load available slots whenever the date changes inside the reschedule modal
+  const onRescheduleDateChange = async (date) => {
+    setRescheduleDate(date);
+    setRescheduleTime("");
+    setRescheduleSlots([]);
+    if (!date) return;
+    setSlotsLoading(true);
+    try {
+      const res = await patientAPI.availableSlots(date);
+      setRescheduleSlots(res.data.slots || []);
+    } catch {
+      setRescheduleSlots([]);
+    } finally {
+      setSlotsLoading(false);
+    }
+  };
+
+  // Submit the reschedule request
+  const submitReschedule = async () => {
+    if (!rescheduleDate || !rescheduleTime) {
+      setRescheduleError("Please select a date and time.");
+      return;
+    }
+    setRescheduleLoading(true);
+    setRescheduleError("");
+    try {
+      await patientAPI.rescheduleAppointment(rescheduleTarget.appointment_id, {
+        scheduled_datetime: `${rescheduleDate}T${rescheduleTime}:00`,
+      });
+      setRescheduleTarget(null);
+      load();
+    } catch (err) {
+      setRescheduleError(err.response?.data?.error || "Failed to reschedule.");
+    } finally {
+      setRescheduleLoading(false);
     }
   };
 
@@ -170,20 +227,135 @@ export function PatientAppointments() {
           ]}
           data={sortedAppointments}
           emptyMsg="No appointments yet. Book your first one!"
-          // Show cancel button for scheduled upcoming appointments
+          // Show reschedule and cancel buttons for scheduled upcoming appointments
           actions={(row) =>
             row.status === "scheduled" ? (
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={() => cancel(row.appointment_id)}
-              >
-                Cancel
-              </Button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Button
+                  size="sm"
+                  variant="cyan"
+                  onClick={() => openReschedule(row)}
+                >
+                  Reschedule
+                </Button>
+                <Button
+                  size="sm"
+                  variant="danger"
+                  onClick={() => cancel(row.appointment_id)}
+                >
+                  Cancel
+                </Button>
+              </div>
             ) : null
           }
         />
       </Card>
+
+      {/* Reschedule modal */}
+      <Modal
+        open={!!rescheduleTarget}
+        onClose={() => setRescheduleTarget(null)}
+        title="Reschedule Appointment"
+      >
+        {(() => {
+          const fieldStyle = {
+            width: "100%",
+            padding: "12px 14px",
+            background: "rgba(0,0,0,0.35)",
+            border: "1px solid var(--border)",
+            borderRadius: 10,
+            color: "var(--text-primary)",
+            fontSize: "0.875rem",
+            fontFamily: "var(--font-body)",
+            outline: "none",
+            boxSizing: "border-box",
+          };
+          const labelStyle = {
+            fontSize: "0.72rem",
+            fontWeight: 600,
+            color: "var(--text-muted)",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            display: "block",
+            marginBottom: 6,
+          };
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 20, padding: "4px 0" }}>
+              <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                Current:{" "}
+                <strong style={{ color: "var(--text-primary)" }}>
+                  {rescheduleTarget?.scheduled_datetime
+                    ? new Date(rescheduleTarget.scheduled_datetime).toLocaleString("en-GB", {
+                        day: "2-digit", month: "short", year: "numeric",
+                        hour: "2-digit", minute: "2-digit",
+                      })
+                    : "—"}
+                </strong>{" "}
+                &mdash; {rescheduleTarget?.modality}
+              </p>
+
+              <div>
+                <label style={labelStyle}>New Date</label>
+                <input
+                  type="date"
+                  value={rescheduleDate}
+                  min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)}
+                  onChange={(e) => onRescheduleDateChange(e.target.value)}
+                  style={{ ...fieldStyle, colorScheme: "dark" }}
+                />
+              </div>
+
+              <div>
+                <label style={labelStyle}>Available Time Slots (09:00 – 21:00)</label>
+                <select
+                  value={rescheduleTime}
+                  onChange={(e) => setRescheduleTime(e.target.value)}
+                  disabled={!rescheduleDate || slotsLoading || rescheduleSlots.length === 0}
+                  style={{
+                    ...fieldStyle,
+                    appearance: "none",
+                    opacity: !rescheduleDate || slotsLoading ? 0.85 : 1,
+                  }}
+                >
+                  <option value="" style={{ background: "#061628" }}>
+                    {!rescheduleDate
+                      ? "Select a date first"
+                      : slotsLoading
+                        ? "Loading available slots..."
+                        : rescheduleSlots.length
+                          ? "Select a time slot"
+                          : "No available slots for this date"}
+                  </option>
+                  {rescheduleSlots.map((s) => (
+                    <option key={s} value={s} style={{ background: "#061628" }}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {rescheduleError && <Alert type="error">{rescheduleError}</Alert>}
+
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                <Button
+                  variant="ghost"
+                  onClick={() => setRescheduleTarget(null)}
+                  disabled={rescheduleLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="cyan"
+                  onClick={submitReschedule}
+                  disabled={rescheduleLoading || !rescheduleDate || !rescheduleTime}
+                >
+                  {rescheduleLoading ? "Saving…" : "Confirm Reschedule"}
+                </Button>
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
     </DashboardLayout>
   );
 }

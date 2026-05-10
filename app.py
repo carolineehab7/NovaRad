@@ -589,6 +589,43 @@ def api_cancel_appointment(appointment_id):
         conn.rollback(); cursor.close(); conn.close()
         return jsonify({'error': str(e)}), 400
 
+# Reschedule appointment — update scheduled_datetime for a patient's own scheduled appointment
+@app.route('/api/patient/reschedule-appointment/<int:appointment_id>', methods=['POST'])
+@role_required('patient')
+def api_reschedule_appointment(appointment_id):
+    patient_id = session['patient_id']
+    data = request.get_json()
+    new_datetime_str = data.get('scheduled_datetime')
+    try:
+        new_dt = datetime.fromisoformat(new_datetime_str)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid date format.'}), 400
+    if new_dt <= datetime.now():
+        return jsonify({'error': 'New appointment time must be in the future.'}), 400
+    if not is_valid_booking_slot(new_dt):
+        return jsonify({'error': 'Appointments are only available hourly from 09:00 to 21:00.'}), 400
+    conn = get_db(); cursor = conn.cursor()
+    cursor.execute(
+        "SELECT 1 FROM appointment WHERE scheduled_datetime=%s AND status!='cancelled' AND appointment_id!=%s LIMIT 1",
+        (new_dt, appointment_id)
+    )
+    if cursor.fetchone():
+        cursor.close(); conn.close()
+        return jsonify({'error': 'This time slot is already taken. Please choose another.'}), 400
+    try:
+        cursor.execute(
+            "UPDATE appointment SET scheduled_datetime=%s WHERE appointment_id=%s AND patient_id=%s AND status='scheduled'",
+            (new_dt, appointment_id, patient_id)
+        )
+        if cursor.rowcount == 0:
+            conn.rollback(); cursor.close(); conn.close()
+            return jsonify({'error': 'Appointment not found or cannot be rescheduled.'}), 404
+        conn.commit(); cursor.close(); conn.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        conn.rollback(); cursor.close(); conn.close()
+        return jsonify({'error': str(e)}), 400
+
 # Billing & Payments — Patient Billing + Pay Invoice
 @app.route('/api/patient/billing')
 @role_required('patient')
