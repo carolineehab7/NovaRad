@@ -1,10 +1,12 @@
 import axios from "axios";
 
+// Shared axios instance for all frontend API calls.
 const api = axios.create({
   baseURL: "/api",
   withCredentials: true,
 });
 
+// Authentication endpoints.
 export const authAPI = {
   login: (data) => api.post("/auth/login", data),
   logout: () => api.post("/auth/logout"),
@@ -12,6 +14,7 @@ export const authAPI = {
   me: () => api.get("/auth/me"),
 };
 
+// Patient-facing endpoints for profile, booking, billing, and records.
 export const patientAPI = {
   dashboard: () => api.get("/patient/dashboard"),
   profile: () => api.get("/patient/profile"),
@@ -22,13 +25,16 @@ export const patientAPI = {
     api.get(`/patient/available-slots?date=${encodeURIComponent(date)}`),
   bookAppointment: (data) => api.post("/patient/book-appointment", data),
   cancelAppointment: (id) => api.post(`/patient/cancel-appointment/${id}`),
-  rescheduleAppointment: (id, data) => api.post(`/patient/reschedule-appointment/${id}`, data),
+  rescheduleAppointment: (id, data) =>
+    api.post(`/patient/reschedule-appointment/${id}`, data),
   billing: () => api.get("/patient/billing"),
   payInvoice: (id) => api.post(`/patient/pay-invoice/${id}`),
   records: () => api.get("/patient/records"),
+  // Reuses the staff image endpoint to fetch scans linked to patient records.
   getImages: (orderId) => api.get(`/staff/images/${orderId}`),
 };
 
+// Staff-facing endpoints for appointments, orders, reporting, and imaging assets.
 export const staffAPI = {
   dashboard: () => api.get("/staff/dashboard"),
   appointments: () => api.get("/staff/appointments"),
@@ -52,6 +58,7 @@ export const staffAPI = {
   deleteImage: (fileId) => api.delete(`/staff/images/${fileId}`),
 };
 
+// Admin-facing endpoints for operational oversight.
 export const adminAPI = {
   dashboard: () => api.get("/admin/dashboard"),
   staff: () => api.get("/admin/staff"),
@@ -62,6 +69,7 @@ export const adminAPI = {
   reports: () => api.get("/admin/reports"),
 };
 
+// Chatbot endpoint with user message and optional conversation history.
 export const chatbotAPI = {
   send: (message, history) => api.post("/chatbot", { message, history }),
 };
