@@ -24,6 +24,7 @@
 - [Security Features](#-security-features)
 - [Troubleshooting](#-troubleshooting)
 - [Team Members](#-team-members)
+- [Screenshots](#-screenshots)
 
 ---
 
@@ -170,12 +171,18 @@ npm install
 
 **Development Mode (Recommended)**
 Run both backend and frontend simultaneously:
+1. First Method
 ```bash
 npm run dev
 ```
 This command uses `concurrently` to start:
 - **Flask Backend** on Port `5000`
 - **React Frontend** on Port `3000` (automatically proxies API calls to Port `5000`)
+
+2. Second Method
+```bash
+.\start.ps1
+```
 
 **Separate Terminals**
 If preferred, you can run them in distinct terminal windows:
@@ -239,3 +246,29 @@ npm run build
 | Khadija Elfeky | Frontend Developer |
 | Reem Khaled | Frontend Developer |
 | Omar Walid | Frontend Developer |
+
+---
+
+## Screenshots
+### Homepage
+<img width="1936" height="1237" alt="Screenshot 2026-05-10 223657" src="https://github.com/user-attachments/assets/63df439c-4dc7-4355-9917-4aa37e76bcb3" />
+<img width="1919" height="1079" alt="Screenshot 2026-05-10 224252" src="https://github.com/user-attachments/assets/4ebee53d-7016-4029-aa0c-d6f25acee709" />
+<img width="1919" height="710" alt="image" src="https://github.com/user-attachments/assets/81e1cb7a-6e96-4eec-90ac-4fc747fae912" />
+
+### MRI page
+<img width="1958" height="1284" alt="image" src="https://github.com/user-attachments/assets/edbaadcb-2168-4a08-81e5-0a6fc1f21aff" />
+
+### Login
+<img width="800" height="918" alt="image" src="https://github.com/user-attachments/assets/075c130c-6040-476f-b11e-cdd97ade8587" />
+
+### Register
+<img width="923" height="1312" alt="image" src="https://github.com/user-attachments/assets/12946dd6-702b-4bb4-9ab8-a65a9c71351f" />
+
+### Patient Portal
+<img width="1947" height="1064" alt="image" src="https://github.com/user-attachments/assets/018ff9df-a6b4-44cb-b331-f69b3d9df0a0" />
+
+### Book Appointment
+<img width="1540" height="1044" alt="image" src="https://github.com/user-attachments/assets/8526aaa5-37d8-4baa-9001-53dc8a80ae7c" />
+
+### Admin Portal
+<img width="2035" height="1052" alt="image" src="https://github.com/user-attachments/assets/97bb302f-545c-4219-97d8-1cbc71c7703d" />
