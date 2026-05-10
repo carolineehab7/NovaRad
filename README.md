@@ -1,307 +1,241 @@
+<div align="center">
+  <img src="Final%20Logo.png" alt="NovaRad Logo" width="250"/>
+  <h1>NovaRad</h1>
+  <p><strong>A comprehensive digital health platform for streamlined radiology department operations.</strong></p>
+  
+  ![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)
+  ![Flask](https://img.shields.io/badge/flask-%23000.svg?style=for-the-badge&logo=flask&logoColor=white)
+  ![Postgres](https://img.shields.io/badge/postgres-%23316192.svg?style=for-the-badge&logo=postgresql&logoColor=white)
+</div>
+
+<br />
+
+## Table of Contents
+- [Overview](#-overview)
+- [Key Features](#-key-features)
+- [Technologies Used](#-technologies-used)
+- [Project Structure](#-project-structure)
+- [Database Schema](#-database-schema)
+- [Getting Started](#-getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation & Setup](#installation--setup)
+  - [Running the Application](#running-the-application)
+- [API Reference](#-api-reference)
+- [Security Features](#-security-features)
+- [Troubleshooting](#-troubleshooting)
+- [Team Members](#-team-members)
+
+---
+
 ## Overview
 
-NovaRad is a comprehensive digital health platform designed to streamline radiology department operations. It features patient registration, appointment scheduling, and access to diagnostic imaging services including MRI, CT scans, Ultrasound, and Digital X-rays. The application provides role-based dashboards for patients, staff, and administrators.
-
-**Stack**: React (Frontend) + Flask (Backend) + PostgreSQL (Database)
+NovaRad is a comprehensive digital health platform designed to streamline radiology department operations. It features patient registration, appointment scheduling, and access to diagnostic imaging services including MRI, CT scans, Ultrasound, and Digital X-rays. The application provides tailored, role-based dashboards for patients, staff, and administrators to ensure seamless workflows and data management.
 
 ---
 
 ## Key Features
 
 ### User Authentication & Authorization
-
 - Patient registration and secure login
 - Role-based access (Patient, Staff, Admin)
-- Session management with authentication context
+- Session management with robust authentication context
 
 ### Diagnostic Services
-
-- MRI scheduling and information
+- MRI scheduling and detailed procedure information
 - CT scan services
 - Ultrasound examinations
 - Digital X-ray imaging
-- Service-specific information pages
+- Dedicated service-specific information pages
 
 ### Multi-Role Dashboards
-
-- **Patient**: Appointments, billing, medical records, profile management
-- **Staff**: Imaging orders, radiology reports, appointment management
-- **Admin**: Staff management, patient administration, billing oversight, report generation
+- **Patient**: Manage appointments, billing, medical records, and profile details.
+- **Staff**: Track imaging orders, process radiology reports, and manage daily appointments.
+- **Admin**: Oversee staff and patient administration, monitor billing, and generate system reports.
 
 ### Data Management
-
-- Secure patient data storage
-- Medical history tracking
-- Appointment and billing records
+- Secure, encrypted patient data storage
+- Comprehensive medical history tracking
+- Appointment histories and billing records
 
 ### User Experience
-
-- Responsive design across all devices
-- Intuitive navigation with sidebar + topbar layout
-- Reusable UI components (cards, tables, modals, buttons)
-- Interactive chatbot support
-
-### Security
-
-- Password hashing and encryption
-- Form input validation
-- Parameterized database queries (SQL injection prevention)
-- Secure session handling
-- CORS protection
+- Fully responsive design optimized for desktop and mobile devices
+- Intuitive navigation with a clean sidebar and topbar layout
+- Reusable, sleek UI components (cards, tables, modals, buttons)
+- Interactive chatbot support for immediate assistance
 
 ---
 
 ## Technologies Used
 
 ### Frontend
-
-- **React** - UI library
-- **JavaScript (ES6+)** - Application logic
-- **CSS3** - Styling
-- **Axios** - HTTP client for API calls
-- **Boxicons** - Icon library
+- **React** - Component-based UI library
+- **JavaScript (ES6+)** - Core application logic
+- **CSS3** - Styling and layout
+- **Axios** - Promise-based HTTP client for API calls
+- **Boxicons** - Premium vector icon library
 
 ### Backend
-
-- **Python 3.x** - Server language
-- **Flask** - Web framework
-- **PostgreSQL** - Relational database
-- **psycopg2** - PostgreSQL adapter
+- **Python 3.x** - Server-side programming language
+- **Flask** - Lightweight, extensible web framework
+- **PostgreSQL** - Advanced open-source relational database
+- **psycopg2** - PostgreSQL database adapter for Python
 
 ---
 
 ## Project Structure
 
-```
+```text
 NovaRad/
 ├── app.py                          # Main Flask application & API routes
 ├── requirements.txt                # Python dependencies
 ├── package.json                    # Node.js dependencies
-├── README.md
+├── README.md                       # Project documentation
 │
 ├── src/                            # React frontend source
 │   ├── App.js                      # Main React component
-│   ├── index.js                    # Entry point
-│   ├── index.css                   # Global styles
-│   ├── api/
-│   │   └── client.js               # Axios API client configuration
-│   ├── context/
-│   │   └── AuthContext.js          # Global authentication state management
-│   ├── components/
-│   │   ├── DashboardLayout.js      # Sidebar + topbar layout
-│   │   └── UI.js                   # Reusable UI components
-│   └── pages/
-│       ├── HomePage.js             # Landing page
-│       ├── LoginPage.js
-│       ├── RegisterPage.js
-│       ├── ModalityPages.js        # MRI, CT, X-Ray, Ultrasound, Founders
-│       ├── patient/                # Patient-specific pages
-│       │   ├── PatientDashboard.js
-│       │   ├── PatientProfile.js
-│       │   ├── PatientAppointments.js
-│       │   ├── PatientBilling.js
-│       │   └── PatientRecords.js
-│       ├── staff/                  # Staff-specific pages
-│       │   ├── StaffDashboard.js
-│       │   ├── ImagingOrders.js
-│       │   └── RadiologyReport.js
-│       └── admin/                  # Admin-specific pages
-│           ├── AdminDashboard.js
-│           ├── AdminStaff.js
-│           ├── AdminPatients.js
-│           └── AdminBilling.js
+│   ├── index.js                    # React DOM entry point
+│   ├── index.css                   # Global application styles
+│   ├── api/                        # Axios configuration & API helpers
+│   ├── context/                    # AuthContext for global state
+│   ├── components/                 # Reusable UI layouts & components
+│   └── pages/                      # Route components (Patient, Staff, Admin)
 │
-├── public/
-│   └── index.html                  # HTML template
-│
-├── static/                         # Static assets
-│   ├── CSS files for different pages
-│   └── JavaScript utilities
-│
-└── build/                          # Production build output (generated)
+├── public/                         # Public HTML templates & assets
+├── static/                         # Static assets (compiled CSS, utility JS)
+└── build/                          # Optimized production build output
 ```
 
 ---
 
 ## Database Schema
 
-### Patient Table
-
-Stores patient information:
-
+### Patient Data Model
+Stores critical patient information securely:
 - **Personal Details**: Name, Date of Birth, Contact Information
 - **Medical History**: Previous diagnoses, medical conditions
-- **Account**: Email, password hash, registration date
+- **Account Data**: Email, password hash, registration timestamp
 
-_Additional tables for appointments, billing, staff, and reports exist in the database._
+> _Note: Additional normalized tables exist for appointments, billing, staff directories, and radiology reports._
 
 ---
 
-## Prerequisites
+## Getting Started
 
-Before you begin, ensure you have:
+### Prerequisites
 
+Before you begin, ensure you have the following installed:
 - **Node.js** (v14 or higher) and npm
 - **Python** (v3.7 or higher)
 - **PostgreSQL** (v12 or higher)
-- **pip** (Python package manager)
+- **pip** (Python package installer)
 
----
+### Installation & Setup
 
-## Installation & Setup
-
-### 1. Clone & Navigate to Project
-
+**1. Clone the Repository**
 ```bash
 git clone <repository-url>
 cd NovaRad
 ```
 
-### 2. Backend Setup (Flask + PostgreSQL)
+**2. Backend Setup (Flask + PostgreSQL)**
 
-#### Create Python Virtual Environment
-
+Create and activate a Python Virtual Environment:
 ```bash
+# Create virtual environment
 python -m venv venv
+
+# Activate on Windows (PowerShell)
+.\venv\Scripts\Activate.ps1
+
+# Activate on Mac/Linux
+source venv/bin/activate
 ```
 
-#### Activate Virtual Environment
-
-- **Windows (PowerShell)**:
-  ```powershell
-  .\venv\Scripts\Activate.ps1
-  ```
-- **Mac/Linux**:
-  ```bash
-  source venv/bin/activate
-  ```
-
-#### Install Python Dependencies
-
+Install Dependencies and Initialize Database:
 ```bash
 pip install -r requirements.txt
-```
 
-#### Initialize Database
-
-```bash
+# Database setup
 flask db init      # Initialize migration folder (first time only)
-flask db migrate   # Create migration
-flask db upgrade   # Apply migration
+flask db migrate   # Create migration scripts
+flask db upgrade   # Apply migration to PostgreSQL
 ```
 
-### 3. Frontend Setup (React)
-
-#### Install Node Dependencies
-
+**3. Frontend Setup (React)**
 ```bash
 npm install
 ```
 
----
+### Running the Application
 
-## Running the Application
-
-### Development Mode
-
-Run both backend and frontend simultaneously with one command:
-
+**Development Mode (Recommended)**
+Run both backend and frontend simultaneously:
 ```bash
 npm run dev
 ```
+This command uses `concurrently` to start:
+- **Flask Backend** on Port `5000`
+- **React Frontend** on Port `3000` (automatically proxies API calls to Port `5000`)
 
-This uses `concurrently` to start:
-- **Flask Backend** on Port 5000
-- **React Frontend** on Port 3000
-
-The React app will automatically proxy API calls to Flask on port 5000.
-
-### Alternative: Separate Terminals
-
-If you prefer to run them in separate terminals:
-
-#### Terminal 1 - Flask Backend (Port 5000)
-
+**Separate Terminals**
+If preferred, you can run them in distinct terminal windows:
 ```bash
-# Make sure venv is activated
+# Terminal 1: Flask Backend (ensure venv is activated)
 python app.py
-```
 
-#### Terminal 2 - React Frontend (Port 3000)
-
-```bash
+# Terminal 2: React Frontend
 npm start
 ```
 
-### Production Build
-
+**Production Build**
 ```bash
-npm run build          # Create optimized production build
-# Copy build folder to Flask static directory for serving
+npm run build
+# The build folder is generated and can be served statically by Flask or a web server like Nginx.
 ```
 
 ---
 
-## Key API Endpoints
+## API Reference
 
-- `POST /api/auth/register` - Patient registration
-- `POST /api/auth/login` - Patient login
-- `GET /api/patient/<id>` - Get patient profile
-- `GET /api/appointments` - List appointments
-- `POST /api/appointments` - Schedule appointment
-- `GET /api/billing` - Get billing information
-
----
-
-## Usage Guide
-
-1. **New User**: Click "Sign Up" to create a patient account
-2. **Login**: Use credentials to log in
-3. **Browse Services**: Explore MRI, CT, X-Ray, and Ultrasound services
-4. **Schedule Appointment**: Select service and preferred date/time
-5. **View Dashboard**: Access personalized dashboard based on your role
+| Endpoint | Method | Description |
+| :--- | :---: | :--- |
+| `/api/auth/register` | `POST` | Patient account creation |
+| `/api/auth/login` | `POST` | Authenticate and create session |
+| `/api/patient/<id>` | `GET` | Retrieve specific patient profile |
+| `/api/appointments` | `GET` | List all available appointments |
+| `/api/appointments` | `POST` | Schedule a new appointment |
+| `/api/billing` | `GET` | Retrieve user billing information |
 
 ---
 
 ## Security Features
 
-- Password hashing with salt
-- Form input validation (frontend & backend)
-- Secure session management
-- SQL injection prevention via parameterized queries
-- CORS configuration for API protection
-- Authentication tokens/sessions for protected routes
+- **Password Hashing**: Secure storage utilizing cryptographic salts.
+- **Input Validation**: Strict checks applied on both frontend interfaces and backend endpoints.
+- **SQL Injection Prevention**: Implementation of parameterized database queries.
+- **CORS Protection**: Controlled Cross-Origin Resource Sharing configuration.
+- **Secure Sessions**: Authentication tokens to guard protected routes and endpoints.
 
 ---
 
 ## Troubleshooting
 
-| Issue                                | Solution                                                              |
-| ------------------------------------ | --------------------------------------------------------------------- |
-| **PostgreSQL connection error**      | Verify DATABASE_URL in `.env` and ensure PostgreSQL is running        |
-| **Module not found errors (Python)** | Run `pip install -r requirements.txt` in activated venv               |
-| **npm dependencies issues**          | Delete `node_modules` and `package-lock.json`, then run `npm install` |
-| **Port already in use**              | Change port in Flask (`app.run(port=5001)`) or React (`.env` file)    |
-| **CORS errors**                      | Verify Flask CORS configuration allows requests from React dev server |
-
----
-
-## Additional Resources
-
-- [Flask Documentation](https://flask.palletsprojects.com/)
-- [React Documentation](https://react.dev/)
-- [PostgreSQL Documentation](https://www.postgresql.org/docs/)
-- [Axios Documentation](https://axios-http.com/)
+| Issue | Potential Solution |
+| :--- | :--- |
+| **PostgreSQL Connection Error** | Verify `DATABASE_URL` in `.env` and confirm PostgreSQL service is running. |
+| **ModuleNotFoundError (Python)** | Ensure the virtual environment is activated before running `pip install -r requirements.txt`. |
+| **npm Dependency Issues** | Delete `node_modules` folder and `package-lock.json`, then re-run `npm install`. |
+| **Port Already in Use** | Modify the Flask port (`app.run(port=5001)`) or the React port in `.env`. |
+| **CORS Errors** | Check Flask CORS configuration to ensure it explicitly permits the React dev server origins. |
 
 ---
 
 ## Team Members
 
-| Name               | Role      |
-| ------------------ | --------- |
-| Caroline El-baiady | Developer |
-| Khadija Elfeky     | Developer |
-| Mohamed Abdelrazik | Developer |
-| Reem Khaled        | Developer |
-| Omar Walid         | Developer |
-
+| Name | Role |
+| :--- | :--- |
+| Caroline El-baiady | Backend Developer |
+| Mohamed Abdelrazik | Backend Developer |
+| Khadija Elfeky | Frontend Developer |
+| Reem Khaled | Frontend Developer |
+| Omar Walid | Frontend Developer |
