@@ -343,7 +343,7 @@ def api_register():
         cursor.close(); conn.close()
         return jsonify({'error': str(e)}), 400
 
-# ─── Patient API ────────────────────────────────────────────────
+###### Patient #######
 
 # Patient Dashboard
 @app.route('/api/patient/dashboard')
@@ -626,7 +626,7 @@ def api_patient_records():
     cursor.close(); conn.close()
     return jsonify(rows)
 
-# ─── Staff API ──────────────────────────────────────────────────
+###### Staff #######
 
 # Staff Dashboard
 @app.route('/api/staff/dashboard')
@@ -681,7 +681,8 @@ def api_staff_appointments():
     elif role == 'radiologist':
         appt_filter = ' WHERE appointment.radiologist_id=%s'
         appt_params = [staff_id]
- # It ensures that all appointments related to the staff are shown in the appointments list, not just the scheduled ones, to allow them to manage (update status) for past and upcoming appointments.
+    # It ensures that all appointments related to the staff are shown in the appointments list, not just the scheduled ones, 
+    # to allow them to manage (update status) for past and upcoming appointments.
     cursor.execute(f'''SELECT appointment.*, patient.p_full_name as patient_name, patient.phone as patient_phone,
         t.s_full_name as staff_name, r.s_full_name as radiologist_name
         FROM appointment
@@ -827,7 +828,7 @@ def api_update_machine(machine_id):
     conn.commit(); cursor.close(); conn.close()
     return jsonify({'ok': True})
 
-# ─── Admin API ──────────────────────────────────────────────────
+###### Admin #######
 
 # Admin Dashboard
 @app.route('/api/admin/dashboard')
@@ -972,7 +973,8 @@ def api_admin_reports():
     rows = rows_to_list(cursor.fetchall())
     cursor.close(); conn.close()
     return jsonify(rows)
-#-----------------------------------
+
+
 # upload images for an order (allowed image types: DCM, JPG, JPEG, PNG)
 @app.route('/api/staff/upload-image/<int:order_id>', methods=['POST'])
 @role_required('receptionist', 'technician', 'radiologist', 'admin')
