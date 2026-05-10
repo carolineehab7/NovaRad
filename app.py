@@ -1025,7 +1025,7 @@ def api_upload_image(order_id):
     ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
     if ext not in ALLOWED_IMAGE_EXTS:
         return jsonify({'error': 'Invalid file type. Allowed: DCM, JPG, JPEG, PNG'}), 400
-
+    # generate a unique filename to store in database to avoid conflicts
     stored_ext = 'png' if ext == 'dcm' else ext
     stored_name = f"{uuid.uuid4().hex}.{stored_ext}"
     # If DICOM, convert to PNG first
